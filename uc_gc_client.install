@@ -1,0 +1,378 @@
+<?php
+
+/**
+ * @file
+ * Install, update, and uninstall functions for the Ubercart GoCardless Client module.
+ */
+
+/**
+ * Implements hook_install().
+ */
+function uc_gc_client_install() {
+
+  variable_set('uc_gc_client_partner_url', 'https://seamless-cms.co.uk');
+  variable_set('uc_gc_client_checkout_label', 'Create Direct Debit with GoCardless');
+  variable_set('uc_gc_client_default_type', 'P');
+  variable_set('uc_gc_client_sandbox', 1);
+  variable_set('uc_gc_client_create_payment', 0);
+  variable_set('uc_gc_client_preauth_email', variable_get('site_mail', ''));
+  variable_set('uc_gc_client_payment_limit', 3);
+  variable_set('date_format_uc_store', 'D d M Y');
+  variable_set('date_format_medium', 'D, d/m/Y - H:i');
+  variable_set('date_format_gocardless' ,  'Y-m-d'); 
+
+  $countries = uc_gc_client_countries_define();
+  variable_set('uc_gc_client_countries', $countries); 
+
+  //Provide 'Interval' attribute and set of options
+  $count = db_select('uc_attributes', 'a')
+    ->fields('a')
+    ->condition('name', 'Interval', '=')
+    ->execute()->rowCount();
+
+  if ($count == 0) {
+    $insert_att = db_insert('uc_attributes')
+      ->fields(array(
+        'name' => 'Interval',
+        'label' => 'Payment interval',
+        'ordering' => 0,
+        'required' => 1,
+        'display' => 1,
+        'description' => 'How often would you like to pay your direct debit?',
+      ))
+      ->execute();
+
+    $options = array('Weekly', 'Fortnightly', 'Monthly', 'Yearly');
+    foreach ($options as $option) {
+      $insert_option = db_insert('uc_attribute_options')
+        ->fields(array(
+          'aid' => $insert_att,
+          'name' => $option,
+          'cost' => 0,
+          'price' => 0,
+          'weight' => 0,
+          'ordering' => 0,
+        ))
+        ->execute();
+    }
+  }
+
+  //Add order statuses
+  $t = get_t();
+  db_merge('uc_order_statuses')
+    ->key(array('order_status_id' => 'mandate_active'))
+    ->insertFields(array(
+      'order_status_id' => 'mandate_active',
+      'title' => $t('GoCardless mandate active'),
+      'state' => 'post_checkout',
+      'weight' => 7,
+      'locked' => 1,
+    ))
+    ->updateFields(array(
+      'state' => 'post_checkout',
+      'locked' => 1,
+    ))
+    ->execute();
+  db_merge('uc_order_statuses')
+    ->key(array('order_status_id' => 'mandate_failed'))
+    ->insertFields(array(
+      'order_status_id' => 'mandate_failed',
+      'title' => $t('GoCardless mandate failed'),
+      'state' => 'post_checkout',
+      'weight' => 8,
+      'locked' => 1,
+    ))
+    ->updateFields(array(
+      'state' => 'post_checkout',
+      'locked' => 1,
+    ))
+    ->execute();
+}
+
+/**
+ * Implements hook_uninstall().
+ */
+function uc_gc_client_uninstall() {
+
+  // Remove variables
+  global $conf;
+  foreach (array_keys($conf) as $key) {
+    if (strpos($key, 'gc_client_') === 0) {
+      variable_del($key);
+    }
+  }
+}
+
+/**
+ * Implements hook_schema().
+ */
+function uc_gc_client_schema() {
+
+  $schema['uc_gc_client'] = array(
+    'description' => 'Stores data on GoCardless orders',
+    'fields' => array(
+      'ucid' => array(
+        'description' => 'Ubercart order ID',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not NULL' => TRUE,
+        'default' => 0,
+      ),
+      'ucpid' => array(
+        'description' => 'Ubercart product ID',
+        'type' => 'int',
+        'not NULL' => FALSE,
+      ),
+      'gcid' => array(
+        'description' => 'The GoCardless mandate ID',
+        'type' => 'varchar',
+        'length' => '255',
+        'not NULL' => TRUE,
+      ),
+      'gcrid' => array(
+        'description' => 'The GoCardless Redirect flow ID associated with order',
+        'type' => 'varchar',
+        'length' => '64',
+        'not NULL' => FALSE,
+      ),
+      'gccid' => array(
+        'description' => 'The GoCardless Customer ID associated with order',
+        'type' => 'varchar',
+        'length' => '64',
+        'not NULL' => FALSE,
+      ),
+      'uid' => array(
+        'description' => 'Customer’s user ID',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not NULL' => TRUE,
+        'default' => 0,
+      ),
+      'next_payment' => array(
+        'description' => 'Timestamp for the next payment',
+        'type' => 'int',
+        'not NULL' => FALSE,
+      ),
+      'type' => array(
+        'description' => 'Subscription or One-off payment',
+        'type' => 'varchar',
+        'length' => '1',
+        'not NULL' => TRUE,
+        'default' => 'S',
+      ),
+      'status' => array(
+        'description' => 'The GoCardless mandate status',
+        'type' => 'varchar',
+        'length' => '255',
+        'not NULL' => FALSE,
+      ),
+      'created' => array(
+        'description' => 'Unix timestamp when the order was created',
+        'type' => 'int',
+        'not NULL' => TRUE,
+        'default' => 0,
+      ),
+      'start_date' => array(
+        'description' => 'Unix timestamp when the first payment is charged',
+        'type' => 'int',
+        'not NULL' => FALSE,
+        'default' => 0,
+      ),
+      'updated' => array(
+        'description' => 'Unix timestamp when the Status was updated',
+        'type' => 'int',
+        'not NULL' => TRUE,
+        'default' => 0,
+      ),
+      'sandbox' => array(
+        'description' => 'Whether or not it is a sandbox transaction',
+        'type' => 'int',
+        'size' => 'tiny',
+        'not NULL' => TRUE,
+        'default' => 0,
+      ),
+    ),
+    'unique keys' => array(
+      'primary index' => array('gcid', 'ucpid')
+    ),
+  );
+  $schema['uc_gc_client_products'] = array(
+    'description' => 'GoCardless information for uc_products',
+    'fields' => array(
+      'nid' => array(
+        'description' => 'The node ID for the product',
+        'type' => 'int',
+        'not NULL' => TRUE,
+      ),
+      'type' => array(
+        'description' => 'Subscription or pre-authorization',
+        'type' => 'varchar',
+        'length' => '1',
+        'not NULL' => FALSE,
+      ),
+      'price_x' => array(
+        'description' => 'Subscription multiplier',
+        'type' => 'numeric',
+        'not NULL' => TRUE,
+        'default' => 1,
+        'precision' => '6',
+        'scale' => '3',
+      ),
+      'start_date' => array(
+        'description' => 'Optional start date for new mandate',
+        'type' => 'int',
+        'not NULL' => FALSE,
+      ),
+      'interval_length' => array(
+        'description' => 'The interval between scheduled payment creations',
+        'type' => 'int',
+        'not NULL' => FALSE,
+      ),
+      'interval_unit' => array(
+        'description' => 'The interval unit between scheduled payment creations',
+        'type' => 'varchar',
+        'length' => '32',
+        'not NULL' => FALSE,
+      ),
+      'raise_payment' => array(
+        'description' => 'Raise payment immediately upon completion of checkout',
+        'type' => 'int',
+        'size' => 'tiny',
+        'not NULL' => TRUE,
+      ),
+    ),
+    'primary key' => array('nid'),
+  );
+  $schema['uc_gc_client_schedules'] = array(
+    'description' => 'Schedules table',
+    'fields' => array(
+      'sid' => array(
+        'description' => 'Schedule ID',
+        'type' => 'serial',
+        'not NULL' => TRUE,
+      ),
+      'ucid' => array(
+        'description' => 'Order ID',
+        'type' => 'int',
+        'not NULL' => TRUE,
+      ),
+      'ucpid' => array(
+        'description' => 'Product ID',
+        'type' => 'int',
+        'not NULL' => TRUE,
+      ),
+      'type' => array(
+        'description' => 'The type of scheduled event',
+        'type' => 'varchar',
+        'length' => '16',
+        'not NULL' => TRUE,
+      ),
+      'date' => array(
+        'description' => 'A formatted date string for the scheduled event',
+        'type' => 'varchar',
+        'length' => '32',
+        'not NULL' => TRUE,
+      ),
+      'timestamp' => array(
+        'description' => 'The timestamp for the scheduled event',
+        'type' => 'int',
+        'not NULL' => TRUE,
+      ),
+      'status' => array(
+        'description' => 'The status of the schedule',
+        'type' => 'int',
+        'size' => 'tiny',
+        'not NULL' => TRUE,
+      ),
+      'data' => array(
+        'description' => 'Available for serialized data by other modules',
+        'type' => 'blob',
+        'not NULL' => FALSE,
+      ),
+      'created' => array(
+        'description' => 'Timestamp when scheduled event was created',
+        'type' => 'int',
+        'not NULL' => FALSE,
+      ),
+    ),
+    'primary key' => array('sid'),
+    'indexes' => array(
+      'timestamp' => array('timestamp'),
+      'type' => array('type'),
+      'ucid' => array('ucid', 'ucpid'),
+    ),
+  );
+  $schema['uc_gc_client_schedules_adjs'] = array(
+    'description' => 'Scheduled adjustments table',
+    'fields' => array(
+      'aid' => array(
+        'description' => 'The Scheduled Adjustment ID',
+        'type' => 'serial',
+        'not NULL' => TRUE,
+      ),
+      'sid' => array(
+        'description' => 'The Schedule ID',
+        'type' => 'int',
+        'not NULL' => TRUE,
+      ),
+      'title' => array(
+        'description' => 'An optional  title for the Scheduled Adj',
+        'type' => 'varchar',
+        'length' => '64',
+        'not NULL' => FALSE,
+      ),
+      'amount' => array(
+        'description' => 'The amount of the Scheduled Adj',
+        'type' => 'numeric',
+        'not NULL' => TRUE,
+        'precision' => '10',
+        'scale' => '2',
+      ),
+    ),
+    'primary key' => array('aid'),
+    'indexes' => array(
+      'sid' => array('sid'),
+    ),
+  );
+  return $schema;
+}
+
+/**
+ * Add a mandate_active order status.
+ */
+function uc_gc_client_update_7001() {
+
+  db_insert('uc_order_statuses')
+    ->fields(array(
+      'order_status_id' => 'mandate_active',
+      'title' => t('GoCardless mandate active'),
+      'state' => 'post_checkout',
+      'weight' => 7,
+      'locked' => 1,
+    ))
+    ->execute();
+}
+
+/**
+ * Add a mandate_failed order status.
+ */
+function uc_gc_client_update_7002() {
+
+  db_insert('uc_order_statuses')
+    ->fields(array(
+      'order_status_id' => 'mandate_failed',
+      'title' => t('GoCardless mandate failed'),
+      'state' => 'post_checkout',
+      'weight' => 8,
+      'locked' => 1,
+    ))
+    ->execute();
+}
+
+/**
+ * Create GC country definitions as a variable.
+ */
+function uc_gc_client_update_7003() {
+  $countries = uc_gc_client_countries_define();
+  variable_set('uc_gc_client_countries', $countries); 
+}

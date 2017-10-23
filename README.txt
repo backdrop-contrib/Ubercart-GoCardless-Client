@@ -1,0 +1,131 @@
+CONTENTS OF THIS FILE
+---------------------
+   
+ * Introduction
+ * Requirements
+ * Recommended modules
+ * Installation
+ * Configuration
+ * FAQ
+ * Maintainers
+
+
+INTRODUCTION
+------------
+
+The Ubercart GoCardless Client module provides an integration with the
+Ubercart e-commerce suite, and GoCardless.com. Sites that implement the 
+module are 'clients' of https://seamless-cms.co.uk, which handles the 
+management of direct debit mandates with GoCardless on behalf of the client
+site.
+
+The module integrates into Ubercart like any other Payment service module,
+and allows customers to create a direct debit mandate for paying for products
+upon checking out.
+
+The big advantage with GoCardless over other payment services is that it
+charges just 1% on transactions.
+
+There are two kinds of payment service available from GoCardless: Subscriptions and One-off Payments. 
+
+Subscriptions are automatic recurring payment, and  work well for users
+that want to take the same payment on a regular basis (for instance £5 per 
+week, or £20 on the first of each month).
+
+One-off Payments allow you, the end user, to trigger a payment against a 
+direct debit mandate at any time with the API. This allows you to charge 
+your end customers ad-hoc amounts.
+
+ * For a full description of the module, visit the project page:
+   https://drupal.org/project/uc_gc_client
+
+ * To submit bug reports and feature suggestions, or to track changes:
+   https://drupal.org/project/issues/uc_gc_client
+
+
+REQUIREMENTS
+------------
+
+ * An SSL certificate (https) is required in order to use the module.
+
+ * This module requires the following modules:
+
+   - Ubercart Payment (https://www.drupal.org/project/ubercart)
+   - Ubercart Product Attibutes (https://www.drupal.org/project/ubercart)
+   - Date (https://www.drupal.org/project/date)
+
+
+RECOMMENDED MODULES
+-------------------
+
+ * Date Popup (https://www.drupal.org/project/date):
+   This module ships with the Date module and when enabled it provides a
+   user friendly popup widget for date fields.
+ * Fieldset Helper (https://www.drupal.org/project/fieldset_helper):
+   Provides enhanced user experience for customers and administrators
+   by remembering the state of a Drupal collapsible fieldsets.
+
+
+INSTALLATION
+------------
+ 
+ * Install as you would normally install a contributed Drupal module. Visit:
+   https://drupal.org/documentation/install/modules-themes/modules-7
+   for further information.
+
+
+CONFIGURATION
+-------------
+
+ * Install and enable the Ubercart payment service in the normal way:
+   admin >> store >> settings >> payment >> method >> gc_client 
+
+ * Before you can use your site with GoCardless you need to 'Connect' as a 
+   client of Seamless CMS. More information on doing this is available at ...
+
+ * Ensure that the Payment method pane is enabled at
+   admin >> store >> settings >> checkout 
+
+ * Additional settings are provided for each specific Ubercart product. These 
+   are configurred by clicking the GoCardless Settings vertical tab, at the
+   bottom of the product's node edit form.
+
+ * The module provides a Payment Interval attribute, with four presets: 
+   weekly, fortnightly, monthly and yearly. Enabling this will allow your
+   customers to choose the payment plan of their choice. Alternatively you can
+   configure a product to a specific fixed payment interval.
+
+ * Several hooks are provided to enable other modules to interact with this
+   one at key moments, such as before setting up a new direct debit mandate,
+   or before creating a payment, or after receiving a webhook from GoCardless.
+   More information on using these is provided in uc_gc_client.api.php.
+
+
+FAQ
+---
+
+Q: Where can I get an affordable SSL certificate for my site?
+
+A: SSL certificates are available for free from https://www.sslforfree.com. 
+   Let's Encrypt is the first free and open Certificate Authority. Since they
+   are a charity it is recommended that you make a small donation to their
+   service to help make it sustainable.
+
+
+Q: Why not integrate directly with GoCardless rather than as a client of
+   Seamless CMS?
+
+A: It is perfectly possible to do this and GoCardless provide very good
+   instructions for using their API. However, as a partner of GoCardless, 
+   Seamless CMS generates an income of 10% of GoCardless' fees 
+   (0.1% of each transaction). It is intended that by building up this 
+   business, I can develop a modest income stream to ensure that the module
+   is properly maintained, and I am able to respond efficiently to security
+   threats, issues, and feature requests. So please help spread the word!
+
+
+MAINTAINERS
+-----------
+
+Current maintainers:
+ * Rob Squires (roblog) - https://www.drupal.org/u/roblog
