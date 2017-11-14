@@ -6,6 +6,7 @@ CONTENTS OF THIS FILE
  * Recommended modules
  * Installation
  * Configuration
+ * International payments
  * FAQ
  * Maintainers
 
@@ -99,6 +100,30 @@ CONFIGURATION
    one at key moments, such as before setting up a new direct debit mandate,
    or before creating a payment, or after receiving a webhook from GoCardless.
    More information on using these is provided in uc_gc_client.api.php.
+
+
+INTERNATIONAL PAYMENTS
+----------------------
+
+International payments are enabled at: admin >> store >> settings >> payment >> method >> gc_client.
+
+After enabling international payments, choose which countries GC can handle, 
+at: admin >> store >> settings >> countries >> gocardless.
+
+If you are using other payment methods in addition to GoCardless, you must 
+enable and configure the uc_ajax module, to ensure that the correct countries 
+are listed in the Delivery and Billing panes at checkout.
+
+After enabling uc_ajax go to admin >> store >> settings >> checkout >> ajax:
+
+  1. Add 'Payment method' as a Triggering form element 
+  2. Select Delivery information and Billing information as Panes to update
+  3. Submit 
+
+You must also make sure that GC isn't the default payment method, because it
+needs to be actively selected in checkout in order to load the correct 
+countries. (The default payment method is the first enabled method in the list
+at admin >> store >> settings >> payment.)
 
 
 FAQ

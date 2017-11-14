@@ -35,7 +35,6 @@ function uc_gc_client_payments_form($form, &$form_state, $order) {
     $title_count[$product->title] == 1 ? $title[$ucpid] = $product->title : $title[$ucpid] = $product->title . ' (' . $title_count[$product->title] . ')';
     $product_select[$ucpid] = $title[$ucpid];
   }
-  // dpm($product_select);
   if ($count == 1) {
 
     $ucpid = reset($gcs)->ucpid;
@@ -115,8 +114,8 @@ function uc_gc_client_payments_form($form, &$form_state, $order) {
       uc_currency_format($product->cost),
       uc_currency_format($product->price),
       $interval == ' ' ? 'Not set' : $interval,
-      !is_null($gc->next_payment) ? format_date($gc->next_payment, 'medium') : 'None',
-      format_date(strtotime($mandate->next_possible_charge_date), 'uc_store'),
+      $mandate->status != 'cancelled' && !is_null($gc->next_payment) ? format_date($gc->next_payment, 'medium') : '-',
+      !is_null($mandate->next_possible_charge_date) ? format_date(strtotime($mandate->next_possible_charge_date), 'uc_store') : '-',
       $mandate->id,
       format_date(strtotime($mandate->created_at), 'uc_store'),
       $mandate->status,
@@ -174,9 +173,24 @@ function uc_gc_client_payments_form($form, &$form_state, $order) {
     );
     $result = uc_gc_client_api($params);
     $payments = $result->response->body->payments;
+
+    //One-off payments that have been created under the same mandate
+    $params = array(
+      'endpoint' => 'payments',
+      'action' => 'list',
+      'mandate' => $gc->gcid,
+    );
+    $result = uc_gc_client_api($params);
+    $payments_of = $result->response->body->payments;
+    if (count($payments_of) >= 1) {
+      $payments = array_merge($payments, $payments_of);
+      usort($payments, "sortFunction");
+    }
   }
 
   $payment_rows = array();
+  $payment_total = 0;
+  $payment_statuses = array('confirmed', 'paid_out',);
   foreach ($payments as &$payment) {
     $payment_rows[] = array(
       $payment->description,
@@ -185,10 +199,10 @@ function uc_gc_client_payments_form($form, &$form_state, $order) {
       format_date(strtotime($payment->created_at), 'uc_store'),
       $payment->status,
       format_date(strtotime($payment->charge_date), 'uc_store'),
-      //!is_null($payment->paid_at) ? format_date(strtotime($payment->paid_at), 'uc_store') : '--',
     );
+    if (in_array($payment->status, $payment_statuses)) 
+      $payment_total = $payment_total + $payment->amount;
   }
-  // dpm($payment_rows);
   $form['table'] = array(
     '#theme' => 'table',
     '#header' => $header,
@@ -211,6 +225,7 @@ function uc_gc_client_payments_form($form, &$form_state, $order) {
       '#header' => $payment_header,
       '#rows' => isset($payment_rows) ? $payment_rows : NULL,
       '#empty' => t('There are no payments for this product yet.'),
+       '#suffix' => t('Total confirmed payments: @payment_total', array('@payment_total' => uc_currency_format($payment_total / 100, $sign))),
     );
   }
 
@@ -231,7 +246,7 @@ function uc_gc_client_payments_form($form, &$form_state, $order) {
     '#title' => t('Create a payment'),
     '#collapsible' => TRUE,
     '#collapsed' => TRUE,
-    '#access' => $gc->type == 'P' ? TRUE : FALSE,
+    //'#access' => $gc->type == 'P' ? TRUE : FALSE,
   );
   $form['create_payment']['payment_amount'] = array(
     '#type' => 'uc_price',
@@ -800,4 +815,12 @@ function uc_gc_client_schedules_autocomplete($string) {
     }
   }
   drupal_json_output($matches);
+}
+
+/**
+ * Sorts payments by created_at date id one-offs have been merged with
+ * subsription payments.
+ */
+function sortFunction( $a, $b ) {
+  return strtotime($a->created_at) - strtotime($b->created_at);
 }

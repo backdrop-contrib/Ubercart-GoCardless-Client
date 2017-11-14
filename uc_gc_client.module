@@ -70,6 +70,15 @@ function uc_gc_client_menu() {
     'type' => MENU_NORMAL_ITEM,
     'file' => 'uc_gc_client.tools.inc',
   );
+  $items['admin/store/settings/countries/gocardless'] = array(
+    'title' => 'GoCardless',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('uc_gc_client_countries_form'),
+    'access arguments' => array('edit orders'),
+    'type' => MENU_LOCAL_TASK,
+    'weight' => 4,
+    'file' => 'uc_gc_client.admin.inc',
+  );
   return $items;
 }
 
@@ -136,53 +145,107 @@ function uc_gc_client_uc_payment_method() {
 }
 
 /**
- * Implements hook_form_alter().
- *
- * Alter the checkout review form to post the order to GoCardless.
+ * Implements hook_element_info().
  */
-function uc_gc_client_form_alter(&$form, $form_state, $form_id) {
+function uc_gc_client_element_info() {
 
-  // If uc_recurring is enabled this function is provided in
-  // uc_gc_client.recurring.inc.
-  if (module_exists('uc_recurring')) {
-    return;
+  $types = array();
+  $types['uc_gc_client_address'] = array(
+    '#input' => TRUE,
+    '#required' => TRUE,
+    '#process' => array('uc_gc_client_process_address_field'),
+    '#attributes' => array('class' => array('uc-store-address-field')),
+    '#theme_wrappers' => array('container'),
+    '#key_prefix' => '',
+    '#hidden' => FALSE,
+  );
+  return $types;
+}
+
+/**
+ * Element process hook for address fields.
+ */
+function uc_gc_client_process_address_field($element, $form_state) {
+
+  
+  $uc_countries = db_select('uc_countries', 'u')
+    ->fields('u')
+    ->condition('version', 0, '>')
+    ->execute()->fetchAllAssoc('country_iso_code_2');
+
+  $gc_countries = variable_get('uc_gc_client_countries');
+  $enabled_countries = array();
+  foreach($gc_countries as $gc_code => $gc_country) {
+    if ($gc_country['enabled'] && isset($uc_countries[$gc_code])) {
+      $enabled_countries[$uc_countries[$gc_code]->country_id] = $uc_countries[$gc_code]->country_name;
+    }
   }
 
-  // Optional checkout review selected.
-  if ($form_id == 'uc_cart_checkout_form') {
-    if (($order_id = intval($_SESSION['cart_order'])) > 0) {
+  $element = uc_store_process_address_field($element, $form_state);
+  $element[$element['#key_prefix'] . '_country']['#options'] = $enabled_countries;
+  return $element;
+}
+
+
+/**
+ * Implements hook_form_FORM_ID_alter().
+ */
+function uc_gc_client_form_uc_cart_checkout_form_alter(&$form, &$form_state, $form_id) {
+
+  if (($order_id = intval($_SESSION['cart_order'])) > 0) {
+
+    $order = uc_order_load($order_id);
+
+    if ((isset($form['panes']['payment']) && count($form['panes']['payment']['payment_method']['#options']) <= 1) || !isset($form['panes']['payment'])) {
+      $order->payment_method = 'gc_client';
+      uc_order_save($order);
+    }
+
+    if ($order->payment_method == 'gc_client') {
+
+      //Change the address fieldsets to a bespoke type that has countries
+      //filtered to only include GC enabled countries.
+      //if (variable_get('uc_gc_client_currencies')) {
+        if (isset($form['panes']['delivery']))
+          $form['panes']['delivery']['address']['#type'] = 'uc_gc_client_address';
+        if (isset($form['panes']['billing']))
+          $form['panes']['billing']['address']['#type'] = 'uc_gc_client_address';
+      //}
+
+      //Optional checkout review selected. (This should only be selected
+      //if GC is the only enabled payment method.)
       if (variable_get('uc_gc_client_optional_checkout_review', FALSE)) {
 
-        $order = uc_order_load($order_id);
-        if (!isset($order->payment_method)) {
-          $order->payment_method = 'gc_client';
-          uc_order_save($order);
-        }
         $form['actions']['continue']['#value'] = variable_get('uc_gc_client_checkout_label');
         $form['#submit'][] = 'uc_gc_client_checkout_form_submit';
       }
-    }
+    } 
   }
+}
+
+/**
+ * Implements hook_form_FORM_ID_alter().
+ */
+function uc_gc_client_form_uc_cart_checkout_review_form_alter(&$form, &$form_state, $form_id) {
+
   // Optional checkout not selected.
-  if ($form_id == 'uc_cart_checkout_review_form') {
-    if (($order_id = intval($_SESSION['cart_order'])) > 0) {
+  if (($order_id = intval($_SESSION['cart_order'])) > 0) {
 
-      $order = uc_order_load($order_id);
+    $order = uc_order_load($order_id);
 
-      //This allows you to omit the Payment method pane, which you would
-      //only do if you had only one payment method enabled.
-      if (!isset($order->payment_method)) {
-        $order->payment_method = 'gc_client';
-        uc_order_save($order);
-      }
+    //This allows you to omit the Payment method pane, and is safe because
+    //you would only do if you had just one payment method enabled.
+    if (!isset($order->payment_method) || empty($order->payment_method)) {
+      $order->payment_method = 'gc_client';
+      uc_order_save($order);
+    }
 
-      if ($order->payment_method == 'gc_client') {
-        $form['actions']['submit']['#access'] = FALSE;
-        $form['#prefix'] = '<table style="display: inline; padding-top: 1em;"><tr><td>';
-        $checkout_review_form = drupal_get_form('uc_gc_client_checkout_review_form', $order);
-        $suffix = '</td><td>' . drupal_render($checkout_review_form) . '</td></tr></table>';
-        $form['#suffix'] = $suffix;
-      }
+    if ($order->payment_method == 'gc_client') {
+      $form['actions']['submit']['#access'] = FALSE;
+      $form['#prefix'] = '<table style="display: inline; padding-top: 1em;"><tr><td>';
+      $checkout_review_form = drupal_get_form('uc_gc_client_checkout_review_form', $order);
+      $suffix = '</td><td>' . drupal_render($checkout_review_form) . '</td></tr></table>';
+      $form['#suffix'] = $suffix;
     }
   }
 }
@@ -289,6 +352,12 @@ function uc_gc_client_mandate_details($order) {
     ->fields('c', array('country_iso_code_2'))
     ->condition('country_id', $country)
     ->execute()->fetchField();
+
+  $valid_countries = variable_get('uc_gc_client_countries');
+  if (!isset($valid_countries[$country_code])) {
+    drupal_set_message(t('Sorry, this country is not avaialable to GoCardless right now.'),'warning');
+    drupal_goto($_SERVER['HTTP_REFERER']);
+  }
 
   // Generate the mandate_details array.
   $mandate_details = array(
@@ -602,7 +671,7 @@ function uc_gc_client_cron() {
     ->condition('next_payment', REQUEST_TIME, '<=')
     ->execute()
     ->fetchAll();
-
+  
   $payment_limit = variable_get('uc_gc_client_payment_limit', 0);
 
   foreach ($payments as $payment) {
@@ -615,8 +684,11 @@ function uc_gc_client_cron() {
       'mandate' => $payment->gcid,
     );
     $result = uc_gc_client_api($params);
-    if(isset($result->response)) $mandate = $result->response->body->mandates;
+
+    if (isset($result->response)) $mandate = $result->response->body->mandates;
     if (!isset($mandate) || in_array($mandate->status, array('cancelled','failed'))) {
+      $watchdog = t('Order #@ucid: Payment creation error.', array('@ucid' => $payment->ucid,));
+      watchdog('uc_gc_client', $watchdog, NULL, WATCHDOG_ERROR);
       continue;
     }
 
@@ -726,7 +798,7 @@ function uc_gc_client_cron() {
       uc_order_comment_save($order->order_id, $order->uid, $comment, 'order', 'Pending', TRUE);
 
       $watchdog = "Bill for @amount for order #@order_id has been raised with GoCardless and will be taken from user #@uid's account on @charge_date.";
-      watchdog('uc_gc_client', $watchdog, array('@amount' => uc_currency_format($amount, $currency_sign), '@order_id' => $order->order_id, '@uid' => $order->uid, '@charge_date' => format_date(strtotime($payment_created->charge_date, 'uc_store'))), WATCHDOG_INFO);
+      watchdog('uc_gc_client', $watchdog, array('@amount' => uc_currency_format($amount, $currency_sign), '@order_id' => $order->order_id, '@uid' => $order->uid, '@charge_date' => format_date(strtotime($payment_created->charge_date), 'uc_store')), WATCHDOG_INFO);
 
       // Provide a hook so that other modules can respond to payment creation.
       module_invoke_all('payment_created', $payment_created, $order->order_id);     
@@ -817,7 +889,7 @@ function uc_gc_client_price_calculate($order, $ucpid, $next_paymentdate, $status
   $amount = ($amount + $adjs_total + $line_items) * $price_x;
 
   //Modify payment amount and currency if international customer
-  if (variable_get('uc_gc_client_currency_rate')) {
+  if (variable_get('uc_gc_client_currencies')) {
     $default_currency = variable_get('uc_currency_code');
 
     !empty($order->billing_country) ? $country_code = $order->billing_country : $country_code = $order->delivery_country;
@@ -961,7 +1033,10 @@ function uc_gc_client_uc_order_cancel($order) {
   $gc_client = db_select('uc_gc_client', 'c')
     ->fields('c')
     ->condition('ucid', $order->order_id)
+    ->condition('status', 'canceled', '!=')
     ->execute()->fetch();
+
+  if (empty($gc_client)) return;
 
   $params = array(
     'endpoint' => 'mandates',
@@ -970,8 +1045,10 @@ function uc_gc_client_uc_order_cancel($order) {
   );
   $result = uc_gc_client_api($params);
 
-  if ($result->response->status_code == 200) {
-
+  if (!isset($result->response)) {
+    drupal_set_message(t('Something went wrong cancelling GoCardless direct debit mandate @ucid. Please try again or contact the site administrator for assistance.', array('@ucid' => $gc_client->gcid)), 'error');
+  }
+  elseif ($result->response->status_code == 200) {
     // Update status on database for all products in order.
     $update = db_update('uc_gc_client')
       ->fields(array(
@@ -984,10 +1061,6 @@ function uc_gc_client_uc_order_cancel($order) {
     $comment = t('Order @order_id cancelled by customer.', array('@order_id' => $order->order_id));
     uc_order_comment_save($order->order_id, $order->uid, $comment, 'order', 'Canceled', TRUE);
     drupal_set_message(t('Your GoCardless direct debit mandate @ucid has been cancelled, and you will receive an email confirmation.', array('@ucid' => $gc_client->gcid)));
-  }
-
-  else {
-    drupal_set_message(t('Something went wrong cancelling GoCardless direct debit mandate @ucid. Please try again or contact the site administrator for assistance.', array('@ucid' => $gc_client->gcid)), 'error');
   }
 }
 
@@ -1051,7 +1124,8 @@ function gc_client_element_validate_integer_positive_zero($element, &$form_state
  */
 function uc_gc_client_currency($country_code) {
 
-  $countries = uc_gc_client_countries_define();
+  //$countries = uc_gc_client_countries_define();
+  $countries = variable_get('uc_gc_client_countries');
 
   if(is_numeric($country_code)) {
     $country_code = db_select('uc_countries', 'c')
@@ -1094,161 +1168,193 @@ function uc_gc_client_countries_define() {
       'region' => 'bacs',
       'currency' => 'GBP',
       'sign' => '£',
+      'enabled' => '1',
     ),
     'SE' => array(
       'region' => 'autogiro',
       'currency' => 'SEK',
       'sign' => 'kr',
+      'enabled' => '0',
     ),
     'AX' => array(
       'region' => 'sepa_core',
       'currency' => 'EUR',
       'sign' => '€',
+      'enabled' => '0',
     ),
     'AT' => array(
       'region' => 'sepa_core',
       'currency' => 'EUR',
       'sign' => '€',
+      'enabled' => '0',
     ),
     'BE' => array(
       'region' => 'sepa_core',
       'currency' => 'EUR',
       'sign' => '€',
+      'enabled' => '0',
     ),
     'CY' => array(
       'region' => 'sepa_core',
       'currency' => 'EUR',
       'sign' => '€',
+      'enabled' => '0',
     ),
     'EE' => array(
       'region' => 'sepa_core',
       'currency' => 'EUR',
       'sign' => '€',
+      'enabled' => '0',
     ),
     'FI' => array(
       'region' => 'sepa_core',
       'currency' => 'EUR',
       'sign' => '€',
+      'enabled' => '0',
     ),
     'FR' => array(
       'region' => 'sepa_core',
       'currency' => 'EUR',
       'sign' => '€',
+      'enabled' => '0',
     ),
     'GF' => array(
       'region' => 'sepa_core',
       'currency' => 'EUR',
       'sign' => '€',
+      'enabled' => '0',
     ),
     'DE' => array(
       'region' => 'sepa_core',
       'currency' => 'EUR',
       'sign' => '€',
+      'enabled' => '0',
     ),
     'GR' => array(
       'region' => 'sepa_core',
       'currency' => 'EUR',
       'sign' => '€',
+      'enabled' => '0',
     ),
     'GP' => array(
       'region' => 'sepa_core',
       'currency' => 'EUR',
       'sign' => '€',
+      'enabled' => '0',
     ),
     'IE' => array(
       'region' => 'sepa_core',
       'currency' => 'EUR',
       'sign' => '€',
+      'enabled' => '0',
     ),
     'IT' => array(
       'region' => 'sepa_core',
       'currency' => 'EUR',
       'sign' => '€',
+      'enabled' => '0',
     ),
     'LV' => array(
       'region' => 'sepa_core',
       'currency' => 'EUR',
       'sign' => '€',
+      'enabled' => '0',
     ),
     'LT' => array(
       'region' => 'sepa_core',
       'currency' => 'EUR',
       'sign' => '€',
+      'enabled' => '0',
     ),
     'LU' => array(
       'region' => 'sepa_core',
       'currency' => 'EUR',
       'sign' => '€',
+      'enabled' => '0',
     ),
     'MT' => array(
       'region' => 'sepa_core',
       'currency' => 'EUR',
       'sign' => '€',
+      'enabled' => '0',
     ),
     'MQ' => array(
       'region' => 'sepa_core',
       'currency' => 'EUR',
       'sign' => '€',
+      'enabled' => '0',
     ),
     'YT' => array(
       'region' => 'sepa_core',
       'currency' => 'EUR',
       'sign' => '€',
+      'enabled' => '0',
     ),
     'MC' => array(
       'region' => 'sepa_core',
       'currency' => 'EUR',
       'sign' => '€',
+      'enabled' => '0',
     ),
     'NL' => array(
       'region' => 'sepa_core',
       'currency' => 'EUR',
       'sign' => '€',
+      'enabled' => '0',
     ),
     'PT' => array(
       'region' => 'sepa_core',
       'currency' => 'EUR',
       'sign' => '€',
+      'enabled' => '0',
     ),
     'RE' => array(
       'region' => 'sepa_core',
       'currency' => 'EUR',
       'sign' => '€',
+      'enabled' => '0',
     ),
     'BL' => array(
       'region' => 'sepa_core',
       'currency' => 'EUR',
       'sign' => '€',
+      'enabled' => '0',
     ),
     'MF' => array(
       'region' => 'sepa_core',
       'currency' => 'EUR',
       'sign' => '€',
+      'enabled' => '0',
     ),
     'PM' => array(
       'region' => 'sepa_core',
       'currency' => 'EUR',
       'sign' => '€',
+      'enabled' => '0',
     ),
     'SM' => array(
       'region' => 'sepa_core',
       'currency' => 'EUR',
       'sign' => '€',
+      'enabled' => '0',
     ),
     'SK' => array(
       'region' => 'sepa_core',
       'currency' => 'EUR',
       'sign' => '€',
+      'enabled' => '0',
     ),
     'SI' => array(
       'region' => 'sepa_core',
       'currency' => 'EUR',
       'sign' => '€',
+      'enabled' => '0',
     ),
     'ES' => array(
       'region' => 'sepa_core',
       'currency' => 'EUR',
       'sign' => '€',
+      'enabled' => '0',
     ),
   );
   return $countries;  

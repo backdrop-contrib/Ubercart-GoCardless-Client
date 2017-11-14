@@ -34,18 +34,19 @@ function uc_gc_client_api($params) {
   $auth = uc_gc_client_authenticate();
   if ($auth == 200) {
     $result = uc_gc_client_post($params);
-    if ($result) {
+    if (isset($result->error)) {
+      $message = t('Error code @code (@error)', array('@code' => $result->code, '@error' => $result->error,));
+      drupal_set_message($message, 'error');
+      if (variable_get('uc_gc_client_debug_api', FALSE)) {
+        watchdog("uc_gc_client", '<pre>' . $message . '<br />' . print_r($result, TRUE) . '</pre>', NULL, WATCHDOG_ERROR);
+      }
+      return $error = $message;
+    }
+    else {
       if (variable_get('uc_gc_client_debug_api', FALSE)) {
         watchdog("uc_gc_client", '<pre>GoCardless API response: <br />' . print_r($result, TRUE) . '</pre>');
       }
       return $result;
-    }
-    else {
-      drupal_set_message(t('Error connecting with GoCardless API'), 'error');
-      if (variable_get('uc_gc_client_debug_api', FALSE)) {
-        watchdog("uc_gc_client", 'Error connecting with GoCardless API', NULL, WATCHDOG_ERROR);
-      }
-      return $error = 'Error connecting with GoCardless API';
     }
   }
   else {
@@ -88,7 +89,6 @@ function uc_gc_client_authenticate() {
     );
     $result = drupal_http_request($url, $options);
     $result_data = json_decode($result->data);
-
     if ($result->code == 200) {
 
       // Get X-CRSF token, and save cookie and token.
@@ -131,8 +131,12 @@ function uc_gc_client_post($data) {
   $options['method'] = 'POST';
   $url = variable_get('uc_gc_client_partner_url') . '/gc/client/' . variable_get('uc_gc_client_org_id' . $ext);
   $response = drupal_http_request($url, $options);
-  $data = json_decode($response->data);
-  return $data;
+
+  if (isset($response->error)) return $response;
+  else {
+    $data = json_decode($response->data);
+    return $data;
+  }
 }
 
 /**
@@ -142,9 +146,6 @@ function uc_gc_client_post($data) {
  * GoCardless OAuth flow.
  */
 function uc_gc_client_connect() {
-
-  //dpm($_POST);
-  //echo '<pre>', print_r($_POST);die;
 
   if (isset ($_POST['environ'])) $_POST['environ'] == 'SANDBOX' ? $ext = '_sandbox' : $ext = '_live';
   

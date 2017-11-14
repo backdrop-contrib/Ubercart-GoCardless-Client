@@ -44,6 +44,14 @@ function uc_gc_client_rules_event_info() {
 }
 
 /**
+ * Implementation of hook_rules_action_info().
+ *
+ * @Todo provide action_cancel
+ */
+function uc_gc_client_rules_action_info() {
+}
+
+/**
  * Action implementation: cancels a subscription on GoCardless.com.
  */
 function uc_gc_client_action_cancel($order) {

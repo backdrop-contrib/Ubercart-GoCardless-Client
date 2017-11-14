@@ -4,18 +4,15 @@
  * @file
  * The administration forms, and their Validate and Submit functions.
  */
+
 function uc_gc_client_sandbox_callback(&$form, &$form_state) {
   variable_set('uc_gc_client_sandbox', $form_state['values']['uc_gc_client_sandbox']);
   ctools_include('ajax');
   ctools_add_js('ajax-responder');
-  //$path = 'admin/store/settings/payment/method/gc_client';
-  //$commands[] = ctools_ajax_command_redirect($path);
   $commands[] = ctools_ajax_command_reload();
   print ajax_render($commands);
   drupal_exit();
-  //return $form;
 }
-
 
 /**
  * Payment method callback.
@@ -130,10 +127,10 @@ function uc_gc_client_uc_payment_method_callback($op, &$order, $form = NULL, &$f
         '#default_value' => variable_get('uc_gc_client_payments_tab'),
         '#description' => t("Ubercart Payments do not work with GoCardless, so checking this will hide the Payments tab when viewing any orders created through GoCardless."),
       );
-      $form['global']['uc_gc_client_currency_rate'] = array(
+      $form['global']['uc_gc_client_currencies'] = array(
         '#type' => 'checkbox',
         '#title' => t('Create payments in foreign currencies'),
-        '#default_value' => variable_get('uc_gc_client_currency_rate'),
+        '#default_value' => variable_get('uc_gc_client_currencies'),
         '#description' => t("Use foreign currency, and adjust payment amount for international customers, according to current exchange rates at <a target='new' href='http://fixer.io'>fixer.io</a>. This only applies when the currency of the customer's country is different to the store's default currency. SEPA and /or AutoGiro regions need to be enabled on your GoCardless account for this to work."),
       );
 
@@ -561,3 +558,64 @@ function uc_gc_client_node_view($node, $view_mode, $langcode) {
   }
 }
 
+/**
+ * Implements hook_form().
+ *
+ * Provides an interface to enable / disable GC countries
+ */
+function uc_gc_client_countries_form($form, &$form_state) {
+
+  $uc_countries = db_select('uc_countries', 'u')
+    ->fields('u')
+    ->condition('version', 0, '>')
+    ->execute()->fetchAllAssoc('country_iso_code_2');
+
+  $gc_countries = variable_get('uc_gc_client_countries');
+  $countries = array();
+  $default_value = array();
+
+  foreach($gc_countries as $gc_code => $gc_country) {
+
+    if (isset($uc_countries[$gc_code])) {
+      $countries[$gc_code] = array(
+        $uc_countries[$gc_code]->country_name,
+        $gc_country['region'],
+        $gc_country['sign'],
+      );
+      if ($gc_country['enabled']) $default_value[$gc_code] = TRUE;
+    }
+  }
+
+  $form = array();
+  
+  $form['markup'] = array(
+    '#markup' => t('<p>Countries should first be enabled in Ubercart before they can be enabled / disabled here.</p>'),
+  );
+  $header = array('Country', 'Direct debit scheme', 'Currency',);
+  $form['countries'] = array(
+    '#type' => 'tableselect',
+    '#header' => $header,
+    '#options' => $countries,
+    '#empty' => t('No countries available.'),
+    '#default_value' => $default_value,
+  );
+  $form['submit'] = array(
+    '#type' => 'submit',
+    '#value' => t('Enable / disable countries'),
+  );
+  return $form;
+}
+
+/**
+ * Implements hook_form_submit().
+ */
+function uc_gc_client_countries_form_submit($form, &$form_state) {
+
+  $countries = $form_state['values']['countries']; 
+  $gc_countries = variable_get('uc_gc_client_countries');
+  foreach($countries as $code => $country) {
+    if ($country) $gc_countries[$code]['enabled'] = 1;
+    else $gc_countries[$code]['enabled'] = 0;
+  }
+  variable_set('uc_gc_client_countries', $gc_countries);
+}

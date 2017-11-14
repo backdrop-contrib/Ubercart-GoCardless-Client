@@ -377,11 +377,15 @@ function uc_gc_client_webhook_mandates($order, $action, $event) {
 
     case 'cancelled':
 
-      $comment = t('Your direct debit mandate @mandate has been cancelled with your bank by GoCardless.', array('@mandate' => $event['links']['mandate']));
-      uc_order_comment_save($order->order_id, $order->uid, $comment, 'order', 'canceled', TRUE);
-
       if ($order->order_status <> 'canceled') {
+
+        $comment = t('Your direct debit mandate @mandate has been cancelled with your bank by GoCardless.', array('@mandate' => $event['links']['mandate']));
+        uc_order_comment_save($order->order_id, $order->uid, $comment, 'order', 'canceled', TRUE);
+
+        $order->order_status = 'canceled';
+        uc_order_save($order);
         uc_order_update_status($order->order_id, 'canceled');
+
         $update = db_update('uc_gc_client')
           ->fields(array(
             'status' => 'canceled',
@@ -390,6 +394,7 @@ function uc_gc_client_webhook_mandates($order, $action, $event) {
           ->condition('ucid', $order->order_id)
           ->execute();
       }
+
       break;
 
     case 'reinstated':
@@ -423,7 +428,7 @@ function uc_gc_client_webhook_payments($order, $action, $event, $resource) {
     ->execute()->fetchField();
 
   !empty($order->billing_country) ? $country_code = $order->billing_country : $country_code = $order->delivery_country;
-  $currency_sign = uc_gc_client_currency($country_code); 
+  $currency_sign = uc_gc_client_currency($country_code)['sign']; 
 
   switch ($action) {
 
