@@ -157,6 +157,12 @@ function uc_gc_client_connect() {
     
   if (isset ($_POST['pass']) && isset($_POST['environ']))
     variable_set('uc_gc_client_user_pass' . $ext, $_POST['pass']);
+
+  //Unset to reduce likelihood of authentication failure if client id
+  //reconnecting.
+  if (isset($_SESSION['gc_client_cookie_created'])) {
+    unset($_SESSION['gc_client_cookie_created']);
+  }
 }
 
 /**
