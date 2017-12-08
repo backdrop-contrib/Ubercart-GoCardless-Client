@@ -88,7 +88,7 @@ CONFIGURATION
    admin >> store >> settings >> checkout 
 
  * Additional settings are provided for each specific Ubercart product. These 
-   are configurred by clicking the GoCardless Settings vertical tab, at the
+   are configured by clicking the GoCardless Settings vertical tab, at the
    bottom of the product's node edit form.
 
  * The module provides a Payment Interval attribute, with four presets: 

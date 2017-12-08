@@ -167,6 +167,13 @@ function uc_gc_client_connect() {
  * @todo incomplete
  */
 function uc_gc_client_disconnect_submit($form, $form_state) {
+
+  if (isset($_SESSION['gc_client_cookie_created'])) {
+    unset($_SESSION['gc_client_cookie_created']);
+  }
+
   $ext = $form_state['values']['ext'];
   variable_del('uc_gc_client_org_id' . $ext);
+  variable_del('uc_gc_client_user_name' . $ext);
+  variable_del('uc_gc_client_user_pass' . $ext);
 }
