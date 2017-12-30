@@ -114,7 +114,7 @@ function uc_gc_client_authenticate() {
 }
 
 /**
- * Handles http requests to GC Partner site.
+ * Handles HTTP requests to GC Partner site.
  */
 function uc_gc_client_post($data) {
 
@@ -168,18 +168,29 @@ function uc_gc_client_connect() {
 /**
  * Implements hook_form_submit.
  *
- * Disconnects client site from partner  .
- *
- * @todo incomplete
+ * Disconnects client site from GC partner site.
  */
 function uc_gc_client_disconnect_submit($form, $form_state) {
 
-  if (isset($_SESSION['gc_client_cookie_created'])) {
-    unset($_SESSION['gc_client_cookie_created']);
-  }
+  $auth = uc_gc_client_authenticate();
+  if ($auth == 200) {
+    $data = array(
+      'endpoint' => 'oauth',
+      'action' => 'revoke',
+    );
+    $result = uc_gc_client_post($data);
 
-  $ext = $form_state['values']['ext'];
-  variable_del('uc_gc_client_org_id' . $ext);
-  variable_del('uc_gc_client_user_name' . $ext);
-  variable_del('uc_gc_client_user_pass' . $ext);
+    if ($result->response == 200) 
+      drupal_set_message(t('You have disconnected successfully from GoCardless')); 
+    else drupal_set_message(t('There was a problem disconnecting from GoCardless'), 'error'); 
+
+    if (isset($_SESSION['gc_client_cookie_created'])) {
+      unset($_SESSION['gc_client_cookie_created']);
+    }
+
+    $ext = $form_state['values']['ext'];
+    variable_del('uc_gc_client_org_id' . $ext);
+    variable_del('uc_gc_client_user_name' . $ext);
+    variable_del('uc_gc_client_user_pass' . $ext);
+  }
 }

@@ -298,10 +298,14 @@ function uc_gc_client_admin_validate(&$form, &$form_state) {
 function uc_gc_client_connect_submit($form, $form_state) {
 
   $form_state['values']['uc_gc_client_sandbox'] == 1 ? $env = 'sandbox' : $env = 'live';
+  global $base_url;
+  $client_url = urlencode($base_url . '/admin/store/settings/payment/method/gc_client');
+
   $url = variable_get('uc_gc_client_partner_url') . '/gc_partner/connect/' . $env;
   drupal_goto($url, array(
     'query' => array(
       'mail' => variable_get('site_mail', ''),
+      'client_url' => $client_url,
     ),
   ));
 }
@@ -313,7 +317,7 @@ function uc_gc_client_connect_submit($form, $form_state) {
  * Required when redirecting to Partner site at beginning of OAuth flow.
  */
 function uc_gc_client_drupal_goto_alter(&$path, &$options, &$http_response_code) {
-  if (overlay_get_mode() == 'child') {
+  if (module_exists('overlay') && overlay_get_mode() == 'child') {
     if (url_is_external($path)) {
       overlay_close_dialog($path, $options);
       overlay_deliver_empty_page();

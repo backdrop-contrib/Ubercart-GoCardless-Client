@@ -7,6 +7,7 @@ CONTENTS OF THIS FILE
  * Installation
  * Configuration
  * International payments
+ * Issues
  * FAQ
  * Maintainers
 
@@ -100,6 +101,14 @@ CONFIGURATION
    one at key moments, such as before setting up a new direct debit mandate,
    or before creating a payment, or after receiving a webhook from GoCardless.
    More information on using these is provided in uc_gc_client.api.php.
+
+
+ISSUES
+------
+
+1. Connecting with GoCardless
+   There is a known issue with the cURL HTTP Request module, that causes
+   authentication to fail when this module attempts to connect.
 
 
 INTERNATIONAL PAYMENTS

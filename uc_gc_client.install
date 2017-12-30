@@ -97,7 +97,7 @@ function uc_gc_client_uninstall() {
   // Remove variables
   global $conf;
   foreach (array_keys($conf) as $key) {
-    if (strpos($key, 'gc_client_') === 0) {
+    if (strpos($key, 'uc_gc_client_') === 0) {
       variable_del($key);
     }
   }
