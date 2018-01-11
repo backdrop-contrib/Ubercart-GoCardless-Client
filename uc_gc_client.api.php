@@ -28,10 +28,9 @@ function hook_mandate_details_alter($order_id, &$mandate_details) {
  * @return
  *   Array of paramaters that will be passed to GoCardless
  */
-function hook_payment_details_alter($order_id, $type, &$payment_details) {
+function hook_payment_details_alter(&$payment_details, $order, $type) {
 
   switch ($type) {
-
     case 'subscription':
       $payment_details['amount'] = $payment_details['amount'] * 2;
       break;

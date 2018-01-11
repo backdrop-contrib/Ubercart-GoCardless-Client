@@ -751,8 +751,10 @@ function uc_gc_client_cron() {
       'name' => $calculate['name'],
     );
 
-    // Provide a hook so that payment details can be altered by another module.
-    drupal_alter('payment_details', $payment_details, $order);     
+    // Invoke hook_payment_details_alter so that payment details can be 
+    //altered by another module.
+    $type = 'scheduled';
+    drupal_alter('payment_details', $payment_details, $order, $type);     
     $amount = $payment_details['amount'];
     $name = $payment_details['name'];
 
@@ -805,20 +807,22 @@ function uc_gc_client_cron() {
     }
 
     // Update next_payment field in uc_gc_client table.
-    $product = $order->products[$payment->ucpid];
-    $string = '+' . $product->data['interval_params']['string'];
-    $next_payment = strtotime($string, $payment->next_payment);
+    if (isset($product->data['interval_params'])) {
+      $product = $order->products[$payment->ucpid];
+      $string = '+' . $product->data['interval_params']['string'];
+      $next_payment = strtotime($string, $payment->next_payment);
 
-    // Provide a hook so that next_payment can be altered by another module.
-    drupal_alter('next_payment', $next_payment, $order);
+      // Provide a hook so that next_payment can be altered by another module.
+      drupal_alter('next_payment', $next_payment, $order);
 
-    $update = db_update('uc_gc_client')
-      ->fields(array(
-        'next_payment' => $next_payment,
-        'updated' => REQUEST_TIME,
-      ))
-      ->condition('ucpid', $payment->ucpid)
-      ->execute();
+      $update = db_update('uc_gc_client')
+        ->fields(array(
+          'next_payment' => $next_payment,
+          'updated' => REQUEST_TIME,
+        ))
+        ->condition('ucpid', $payment->ucpid)
+        ->execute();
+    }
 
     // Update status field in uc_gc_client_schedules table.
     $update = db_update('uc_gc_client_schedules')
@@ -883,7 +887,6 @@ function uc_gc_client_price_calculate($order, $ucpid, $next_paymentdate, $status
   }
 
   //Todo add extra rules here for handling line item amounts
-
   
   $data ? $amount = $data['amount'] : $amount = $product->price;
   $amount = ($amount + $adjs_total + $line_items) * $price_x;

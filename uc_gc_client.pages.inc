@@ -113,7 +113,8 @@ function uc_gc_client_redirect($redirect, $mandate, $customer, $order_id, $payme
         ),
       );
       // Provide hook so that payment details can be altered by another module.
-      drupal_alter('payment_details', $payment_details, $order);     
+      $type = 'subscription';
+      drupal_alter('payment_details', $payment_details, $order, $type);     
 
       $params = array(
         'endpoint' => 'subscriptions',
@@ -173,7 +174,8 @@ function uc_gc_client_redirect($redirect, $mandate, $customer, $order_id, $payme
           ),
         );
         // Provide hook so that payment details can be altered by another module.
-        drupal_alter('payment_details', $payment_details, $order);     
+        $type = 'payment';
+        drupal_alter('payment_details', $payment_details, $order, $type);     
         $params = array(
           'endpoint' => 'payments',
           'action' => 'create',
