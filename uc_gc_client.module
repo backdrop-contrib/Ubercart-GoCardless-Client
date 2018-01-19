@@ -86,13 +86,18 @@ function uc_gc_client_menu() {
  * Implements hook_menu_local_tasks_alter().
  *
  * Removes the Payments tab from an order's View pane if the module is
- * configured to do this on the settings form.
+ * configured to do this on the settings form, or if the payment type is
+ * not GoCardless
  */
 function uc_gc_client_menu_local_tasks_alter(&$data, $router_item, $root_path) {
-  if (variable_get('uc_gc_client_payments_tab', 0)) {
-    if (strpos($root_path, 'admin/store/orders/%') !== FALSE) {
-      $order = uc_order_load(arg(3));
-      if ($order->payment_method == 'gc_client') {
+
+  if (strpos($root_path, 'admin/store/orders/%') !== FALSE) {
+    if (variable_get('uc_gc_client_payments_tab', 0)) {
+      $payment_method = db_select('uc_orders', 'o')
+        ->fields('o', array('payment_method'))
+        ->condition('order_id', arg(3))
+        ->execute()->fetchField();
+      if ($payment_method == 'gc_client') {
         if (isset($data['tabs'][0])) {
           foreach ($data['tabs'][0]['output'] as $key => $output) {
             if ($output['#link']['title'] == 'Payments') {
@@ -799,7 +804,7 @@ function uc_gc_client_cron() {
       $comment = t('Payment for @amount has been created with GoCardless and will be made from your account on @charge_date.', array('@amount' => uc_currency_format($amount, $currency_sign), '@charge_date' => format_date(strtotime($payment_created->charge_date), 'uc_store')));
       uc_order_comment_save($order->order_id, $order->uid, $comment, 'order', 'Pending', TRUE);
 
-      $watchdog = "Bill for @amount for order #@order_id has been raised with GoCardless and will be taken from user #@uid's account on @charge_date.";
+      $watchdog = "Payment for @amount for order #@order_id has been created with GoCardless and will be taken from user #@uid's account on @charge_date.";
       watchdog('uc_gc_client', $watchdog, array('@amount' => uc_currency_format($amount, $currency_sign), '@order_id' => $order->order_id, '@uid' => $order->uid, '@charge_date' => format_date(strtotime($payment_created->charge_date), 'uc_store')), WATCHDOG_INFO);
 
       // Provide a hook so that other modules can respond to payment creation.
@@ -807,8 +812,8 @@ function uc_gc_client_cron() {
     }
 
     // Update next_payment field in uc_gc_client table.
+    $product = $order->products[$payment->ucpid];
     if (isset($product->data['interval_params'])) {
-      $product = $order->products[$payment->ucpid];
       $string = '+' . $product->data['interval_params']['string'];
       $next_payment = strtotime($string, $payment->next_payment);
 

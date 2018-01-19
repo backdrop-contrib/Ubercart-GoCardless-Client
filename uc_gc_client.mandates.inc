@@ -91,6 +91,11 @@ function uc_gc_client_payments_form($form, &$form_state, $order) {
     'mandate' => $gc->gcid,
   );
   $result = uc_gc_client_api($params);
+  if (!isset($result->response)) {
+    drupal_set_message(t('No GoCardless mandate found for this order'));
+    return $form;
+  } 
+  
   $mandate = $result->response->body->mandates;
   if($mandate->scheme == 'bacs') $sign = '£';
   elseif($mandate->scheme == 'sepa_core') $sign = '€';
@@ -124,6 +129,7 @@ function uc_gc_client_payments_form($form, &$form_state, $order) {
       'endpoint' => 'payments',
       'action' => 'list',
       'mandate' => $gc->gcid,
+      'limit' => 500,
     );
     $result = uc_gc_client_api($params);
     $payments = $result->response->body->payments;
@@ -170,6 +176,7 @@ function uc_gc_client_payments_form($form, &$form_state, $order) {
       'endpoint' => 'payments',
       'action' => 'list',
       'subscription' => $subscription_id,
+      'limit' => 500,
     );
     $result = uc_gc_client_api($params);
     $payments = $result->response->body->payments;
@@ -179,6 +186,7 @@ function uc_gc_client_payments_form($form, &$form_state, $order) {
       'endpoint' => 'payments',
       'action' => 'list',
       'mandate' => $gc->gcid,
+      'limit' => 500,
     );
     $result = uc_gc_client_api($params);
     $payments_of = $result->response->body->payments;
