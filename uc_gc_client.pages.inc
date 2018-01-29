@@ -294,6 +294,8 @@ function uc_gc_client_webhook() {
           break;
 
         case 'subscriptions':
+          $order_id = uc_gc_client_id($event['links']['mandate']);
+          $order = uc_order_load($order_id);
           $resource = array();
           uc_gc_client_webhook_subscriptions($order, $event['action'], $event);
           break;
@@ -311,10 +313,15 @@ function uc_gc_client_webhook() {
           $order = uc_order_load($order_id);
           uc_gc_client_webhook_payments($order, $event['action'], $event, $resource);
           break;
+
+        default:
+          $order_id = FALSE;
+          break;
+
       }
 
       // Invoke Rules event.
-      if (module_exists('rules')) {
+      if (module_exists('rules') && $order_id) {
         rules_invoke_event('uc_gc_client_webhook', json_encode($event), json_encode($resource), $order_id);
       }
     }
