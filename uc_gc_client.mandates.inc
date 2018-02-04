@@ -200,6 +200,7 @@ function uc_gc_client_payments_form($form, &$form_state, $order) {
   $payment_total = 0;
   $payment_statuses = array('confirmed', 'paid_out',);
   foreach ($payments as &$payment) {
+    if ($payment->metadata->ucpid != $ucpid) continue;
     $payment_rows[] = array(
       $payment->description,
       $payment->id,
@@ -622,6 +623,8 @@ function uc_gc_client_validate_adjs($order, $ucpid, $dates, $mandate, $amount) {
 
   foreach ($dates as $date) {
 
+    $warning = FALSE;
+  
     // Calculate sum of scheduled adjs for date.
     $db_query = "SELECT s.ucid, s.date, sum( a.amount ) AS sum FROM {uc_gc_client_schedules} s inner join {uc_gc_client_schedules_adjs} a on s.sid = a.sid WHERE s.status = 1 AND s.date = '" . $date . "' AND s.ucpid = " . $order->order_id;
     $result = db_query($db_query)

@@ -93,7 +93,7 @@ function uc_gc_client_redirect($redirect, $mandate, $customer, $order_id, $payme
       ->fields($data)
       ->execute();
 
-    isset($product->data['interval_params']) ? $interval = $product->data['interval_params'] : NULL;
+    !is_null($product->data['interval_params']) ? $interval = $product->data['interval_params'] : NULL;
 
     // If it is a subscription.
     if ($gc_type == 'S') {
@@ -385,15 +385,14 @@ function uc_gc_client_webhook_mandates($order, $action, $event) {
       break;
 
     case 'cancelled':
-
       if ($order->order_status <> 'canceled') {
 
-        $comment = t('Your direct debit mandate @mandate has been cancelled with your bank by GoCardless.', array('@mandate' => $event['links']['mandate']));
+        $comment = t('Your direct debit mandate @mandate has been cancelled with your bank at GoCardless.', array('@mandate' => $event['links']['mandate']));
         uc_order_comment_save($order->order_id, $order->uid, $comment, 'order', 'canceled', TRUE);
 
+        uc_order_update_status($order->order_id, 'canceled');
         $order->order_status = 'canceled';
         uc_order_save($order);
-        uc_order_update_status($order->order_id, 'canceled');
 
         $update = db_update('uc_gc_client')
           ->fields(array(
