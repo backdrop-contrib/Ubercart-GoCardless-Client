@@ -93,7 +93,7 @@ function uc_gc_client_redirect($redirect, $mandate, $customer, $order_id, $payme
       ->fields($data)
       ->execute();
 
-    !is_null($product->data['interval_params']) ? $interval = $product->data['interval_params'] : NULL;
+    !is_null($product->data['interval_params']) ? $interval = $product->data['interval_params'] : $interval = NULL;
 
     // If it is a subscription.
     if ($gc_type == 'S') {
