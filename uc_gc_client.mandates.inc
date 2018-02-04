@@ -30,13 +30,12 @@ function uc_gc_client_payments_form($form, &$form_state, $order) {
   $rows = array();
   $product_select = array();
   $title_count = array();
-  foreach ($order->products as $ucpid => $product) {
+  foreach ($order->products as $product_id => $product) {
     !isset($title_count[$product->title]) ? $title_count[$product->title] = 1 : $title_count[$product->title]++;
-    $title_count[$product->title] == 1 ? $title[$ucpid] = $product->title : $title[$ucpid] = $product->title . ' (' . $title_count[$product->title] . ')';
-    $product_select[$ucpid] = $title[$ucpid];
+    $title_count[$product->title] == 1 ? $title[$product_id] = $product->title : $title[$product_id] = $product->title . ' (' . $title_count[$product->title] . ')';
+    $product_select[$product_id] = $title[$product_id];
   }
   if ($count == 1) {
-
     $ucpid = reset($gcs)->ucpid;
     $text_top = t('<h3><b>Administrate <a href = "@url">@title</a></b></h3>', array('@title' => $product_select[$ucpid], '@url' => url('admin/store/orders/' . $order->order_id)));
     $form['text_top'] = array(
@@ -52,8 +51,8 @@ function uc_gc_client_payments_form($form, &$form_state, $order) {
     if (!empty($form_state['input']['ucpid'])) {
       $ucpid = $form_state['input']['ucpid'];
     }
-    elseif (isset($_SESSION['change_ucpid'])) {
-      $ucpid = $_SESSION['change_ucpid']['ucpid'];
+    elseif (isset($_SESSION['change_ucpid_' . $order->order_id])) {
+      $ucpid = $_SESSION['change_ucpid_' . $order->order_id]['ucpid'];
     }
     elseif (!isset($ucpid)) {
       $ucpid = reset($gcs)->ucpid;
@@ -482,7 +481,8 @@ function uc_gc_client_payments_form($form, &$form_state, $order) {
  * AJAX callback function for vegbox_change_form  .
  */
 function uc_gc_client_payments_form_callback(&$form, &$form_state) {
-  $_SESSION['change_ucpid']['ucpid'] = $form['ucpid']['#value'];
+  $order_id = $form_state['values']['order_id'];
+  $_SESSION['change_ucpid_' . $order_id]['ucpid'] = $form['ucpid']['#value'];
   return $form;
 }
 
@@ -623,8 +623,6 @@ function uc_gc_client_validate_adjs($order, $ucpid, $dates, $mandate, $amount) {
 
   foreach ($dates as $date) {
 
-    $warning = FALSE;
-  
     // Calculate sum of scheduled adjs for date.
     $db_query = "SELECT s.ucid, s.date, sum( a.amount ) AS sum FROM {uc_gc_client_schedules} s inner join {uc_gc_client_schedules_adjs} a on s.sid = a.sid WHERE s.status = 1 AND s.date = '" . $date . "' AND s.ucpid = " . $order->order_id;
     $result = db_query($db_query)
