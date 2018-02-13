@@ -93,7 +93,7 @@ function uc_gc_client_redirect($redirect, $mandate, $customer, $order_id, $payme
       ->fields($data)
       ->execute();
 
-    !is_null($product->data['interval_params']) ? $interval = $product->data['interval_params'] : $interval = NULL;
+    isset($product->data['interval_params']) ? $interval = $product->data['interval_params'] : NULL;
 
     // If it is a subscription.
     if ($gc_type == 'S') {
@@ -281,6 +281,10 @@ function uc_gc_client_webhook() {
       watchdog("uc_gc_client", '<pre>GoCardless webhook: <br />' . print_r($data, TRUE) . '</pre>');
     }
 
+    //Send a success header before processing webhooks, in order to
+    //prevent timeouts.
+    header('HTTP/1.1 200 OK');
+
     // Process the events.
     foreach ($data['events'] as $event) {
 
@@ -325,9 +329,6 @@ function uc_gc_client_webhook() {
         rules_invoke_event('uc_gc_client_webhook', json_encode($event), json_encode($resource), $order_id);
       }
     }
-
-    // Send a success header.
-    header('HTTP/1.1 200 OK');
   }
   else {
     header("HTTP/1.1 498 Invalid Token");
@@ -385,14 +386,15 @@ function uc_gc_client_webhook_mandates($order, $action, $event) {
       break;
 
     case 'cancelled':
+
       if ($order->order_status <> 'canceled') {
 
-        $comment = t('Your direct debit mandate @mandate has been cancelled with your bank at GoCardless.', array('@mandate' => $event['links']['mandate']));
+        $comment = t('Your direct debit mandate @mandate has been cancelled with your bank by GoCardless.', array('@mandate' => $event['links']['mandate']));
         uc_order_comment_save($order->order_id, $order->uid, $comment, 'order', 'canceled', TRUE);
 
-        uc_order_update_status($order->order_id, 'canceled');
         $order->order_status = 'canceled';
         uc_order_save($order);
+        uc_order_update_status($order->order_id, 'canceled');
 
         $update = db_update('uc_gc_client')
           ->fields(array(
@@ -402,7 +404,6 @@ function uc_gc_client_webhook_mandates($order, $action, $event) {
           ->condition('ucid', $order->order_id)
           ->execute();
       }
-
       break;
 
     case 'reinstated':
@@ -428,13 +429,13 @@ function uc_gc_client_webhook_mandates($order, $action, $event) {
 function uc_gc_client_webhook_payments($order, $action, $event, $resource) {
 
   $mandate = $resource->links->mandate;
-  $order_id = uc_gc_client_id($mandate);
+  $order_id = $order->order_id;
   $amount = $resource->amount/100;
   $status = db_select('uc_orders', 'o')
     ->fields('o', array('order_status'))
     ->condition('order_id', $order_id)
     ->execute()->fetchField();
-
+  
   !empty($order->billing_country) ? $country_code = $order->billing_country : $country_code = $order->delivery_country;
   $currency_sign = uc_gc_client_currency($country_code)['sign']; 
 
