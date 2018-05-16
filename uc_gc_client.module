@@ -49,6 +49,12 @@ function uc_gc_client_menu() {
     'weight' => 4,
     'file' => 'uc_gc_client.mandates.inc',
   );
+  $items['gc_client/cancel_payment'] = array(
+    'page callback' => 'uc_gc_client_cancel_payment',
+    'access arguments' => array('edit orders'),
+    'type' => MENU_CALLBACK,
+    'file' => 'uc_gc_client.mandates.inc',
+  );
   $items['gc_client/scheduled_action'] = array(
     'page callback' => 'uc_gc_client_scheduled_action',
     'access arguments' => array('edit orders'),
@@ -668,6 +674,15 @@ function uc_gc_client_pane_cancel_form_submit($form, &$form_state) {
  */
 function uc_gc_client_cron() {
 
+  //Postpone the operation if there is already an instance of 
+  //uc_gc_client_cron running, to mitigate against the possibility of extra
+  //payments being created in error. This can happen if cron takes more than
+  //240s to complete.
+  if (!lock_acquire('uc_gc_client_cron')) {
+    watchdog('uc_gc_client', 'GoCardless payments could not be created becasue there is already an instance of cron running', array(), WATCHDOG_WARNING); 
+    return;
+  }
+
   // Get list of active orders where next_payment is in the past.
   $payments = db_select('uc_gc_client', 'g')
     ->fields('g', array('ucid', 'ucpid', 'gcid', 'uid', 'next_payment'))
@@ -726,8 +741,8 @@ function uc_gc_client_cron() {
 
       if ($count >= $payment_limit) {
 
-        $message = t("Payment for @amount has not been raised because the daily payment limit of @payment_limit has been exceeded for the order.", array('@amount' => uc_currency_format($amount, $currency_sign), '@payment_limit' => $payment_limit));
-        uc_order_comment_save($order->order_id, $order->uid, $message, 'order');
+        $message = t("Payment for @amount has not been created because the daily payment limit of @payment_limit has been exceeded for the order.", array('@amount' => uc_currency_format($amount, $currency_sign), '@payment_limit' => $payment_limit));
+        //uc_order_comment_save($order->order_id, $order->uid, $message, 'order');
 
         $watchdog_array = array(
           '@amount' => uc_currency_format($amount, $currency_sign),
@@ -735,7 +750,7 @@ function uc_gc_client_cron() {
           '@uid' => $order->uid,
           '@payment_limit' => $payment_limit,
         );
-        $watchdog = t("Bill for @amount for order #@order_id has not been raised on user #@uid's account because the daily payment limit of @payment_limit has been exceeded.", $watchdog_array);
+        $watchdog = t("Payment for @amount for order #@order_id has not been created on user #@uid's account because the daily payment limit of @payment_limit has been exceeded.", $watchdog_array);
         watchdog('uc_gc_client', $watchdog, array(), WATCHDOG_WARNING);
 
         // Send a warning email to admin.
@@ -754,6 +769,7 @@ function uc_gc_client_cron() {
     $payment_details = array(
       'amount' => $amount,
       'name' => $calculate['name'],
+      'metadata' => ['ucpid' => $payment->ucpid],
     );
 
     // Invoke hook_payment_details_alter so that payment details can be 
@@ -762,6 +778,7 @@ function uc_gc_client_cron() {
     drupal_alter('payment_details', $payment_details, $order, $type);     
     $amount = $payment_details['amount'];
     $name = $payment_details['name'];
+    $metadata = $payment_details['metadata'];
 
     // Validate the payment amount before creating.
     if ($amount < 1 && $amount != 0) {
@@ -778,10 +795,10 @@ function uc_gc_client_cron() {
     }
 
     elseif ($amount == 0) {
-      $message = t("No payment raised because scheduled amount is @sign0.", array('@sign' => $currency_sign));
+      $message = t("No payment created because scheduled amount is @sign0.", array('@sign' => $currency_sign));
       uc_order_comment_save($order->order_id, $order->uid, $message, 'order');
 
-      $watchdog = t("No payment raised for order #@order_id on user #@uid's account because the amount is @sign0.", array('@order_id' => $order->order_id, '@uid' => $order->uid, '@sign' => $currency_sign));
+      $watchdog = t("No payment created for order #@order_id on user #@uid's account because the amount is @sign0.", array('@order_id' => $order->order_id, '@uid' => $order->uid, '@sign' => $currency_sign));
       watchdog('uc_gc_client', $watchdog, array(), WATCHDOG_WARNING);
     }
 
@@ -794,10 +811,10 @@ function uc_gc_client_cron() {
         'amount' => $amount,
         'currency' => $currency_code,
         'description' => $name,
-        'metadata' => array(
-          'ucpid' => $payment->ucpid,
-        ),
+        'metadata' => $metadata,
       );
+      watchdog("test", '<pre>Params<br />' . print_r($params, TRUE) . '</pre>');
+
       $result = uc_gc_client_api($params);
       $payment_created = $result->response->body->payments;
 
@@ -840,6 +857,7 @@ function uc_gc_client_cron() {
       ->condition('ucpid', $payment->ucpid)
       ->execute();
   }
+  lock_release('uc_gc_client_cron');
 }
 
 /**
@@ -929,7 +947,6 @@ function uc_gc_client_price_calculate($order, $ucpid, $next_paymentdate, $status
   $calcs_arr['adjs_total'] = $adjs_total;
   $calcs_arr['price_x'] = $price_x;
   $calcs_arr['amount'] = number_format(check_plain($amount, "number"), 2, '.', '');
-
   return $calcs_arr;
 }
 

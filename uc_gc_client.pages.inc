@@ -392,9 +392,9 @@ function uc_gc_client_webhook_mandates($order, $action, $event) {
         $comment = t('Your direct debit mandate @mandate has been cancelled with your bank by GoCardless.', array('@mandate' => $event['links']['mandate']));
         uc_order_comment_save($order->order_id, $order->uid, $comment, 'order', 'canceled', TRUE);
 
-        $order->order_status = 'canceled';
-        uc_order_save($order);
         uc_order_update_status($order->order_id, 'canceled');
+        //$order->order_status = 'canceled';
+        //uc_order_save($order);
 
         $update = db_update('uc_gc_client')
           ->fields(array(

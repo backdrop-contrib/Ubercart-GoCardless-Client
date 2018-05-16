@@ -5,6 +5,7 @@
  * Provides an interface for managing customer's GoCardless mandates.
  */
 
+
 /**
  * Displays the GoCardless Payments edit screen .
  */
@@ -110,7 +111,7 @@ function uc_gc_client_payments_form($form, &$form_state, $order) {
     $type = 'One-off payments';
     $header = array('product', 'payment type', 'cost', 'price', 'payment interval', 'next scheduled payment creation', 'next possible charge date', 'gocardless id', 'created', 'status');
 
-    $payment_header = array('Payment name', 'Payment ID', 'Amount', 'Created at', 'Status', 'Charge customer at');
+    $payment_header = array('Created at','Payment name', 'Payment ID', 'Amount','Status', 'Charge customer at','');
 
     $rows[$product->order_product_id] = array(
       $product_select[$ucpid],
@@ -155,7 +156,6 @@ function uc_gc_client_payments_form($form, &$form_state, $order) {
 
     $params = array(
       'endpoint' => 'subscriptions',
-      // 'endpoint' => 'payments',.
       'action' => 'list',
       'mandate' => $gc->gcid,
     );
@@ -199,14 +199,22 @@ function uc_gc_client_payments_form($form, &$form_state, $order) {
   $payment_total = 0;
   $payment_statuses = array('confirmed', 'paid_out',);
   foreach ($payments as &$payment) {
+
     if ($payment->metadata->ucpid != $ucpid) continue;
+
+    if($payment->status == 'pending_submission') {
+      $link = l('Cancel', '/gc_client/cancel_payment/' . $order->order_id . '/' . $payment->id); 
+    }    
+    else $link = NULL;
+    
     $payment_rows[] = array(
+      format_date(strtotime($payment->created_at), 'uc_store'),
       $payment->description,
       $payment->id,
       uc_currency_format($payment->amount / 100, $sign),
-      format_date(strtotime($payment->created_at), 'uc_store'),
       $payment->status,
       format_date(strtotime($payment->charge_date), 'uc_store'),
+      $link,
     );
     if (in_array($payment->status, $payment_statuses)) 
       $payment_total = $payment_total + $payment->amount;
@@ -249,12 +257,13 @@ function uc_gc_client_payments_form($form, &$form_state, $order) {
     '#type' => 'value',
     '#value' => $product_select,
   );
+
+  //Create payment section
   $form['create_payment'] = array(
     '#type' => 'fieldset',
     '#title' => t('Create a payment'),
     '#collapsible' => TRUE,
     '#collapsed' => TRUE,
-    //'#access' => $gc->type == 'P' ? TRUE : FALSE,
   );
   $form['create_payment']['payment_amount'] = array(
     '#type' => 'uc_price',
@@ -833,3 +842,27 @@ function uc_gc_client_schedules_autocomplete($string) {
 function sortFunction( $a, $b ) {
   return strtotime($a->created_at) - strtotime($b->created_at);
 }
+
+/**
+ * Menu callback function.
+ *
+ * Deletes GoC payments if status is pending_submission
+ */
+function uc_gc_client_cancel_payment($ucid, $payment_id) {
+
+  $params = array(
+    'endpoint' => 'payments',
+    'action' => 'cancel',
+    'id' => $payment_id,
+  );
+  $result = uc_gc_client_api($params);
+
+  if ($result->response->status_code == 200) {
+    drupal_set_message(t('Payment @payment_id is cancelled', array('@payment_id' => $payment_id)));
+  }
+  else drupal_set_message(t('There was a problem cancelling payment @payment_id', array('@payment_id' => $payment_id)), 'warning');
+
+  $link = 'admin/store/orders/' . $ucid . '/gocardless';
+  drupal_goto($link);
+}
+
