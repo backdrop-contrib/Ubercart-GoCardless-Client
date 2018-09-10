@@ -678,7 +678,7 @@ function uc_gc_client_cron() {
   //uc_gc_client_cron running, to mitigate against the possibility of extra
   //payments being created in error. This can happen if cron takes more than
   //240s to complete.
-  if (!lock_acquire('uc_gc_client_cron')) {
+  if (!lock_acquire('uc_gc_client_cron', 3600)) {
     watchdog('uc_gc_client', 'GoCardless payments could not be created becasue there is already an instance of cron running', array(), WATCHDOG_WARNING); 
     return;
   }
@@ -813,8 +813,6 @@ function uc_gc_client_cron() {
         'description' => $name,
         'metadata' => $metadata,
       );
-      watchdog("test", '<pre>Params<br />' . print_r($params, TRUE) . '</pre>');
-
       $result = uc_gc_client_api($params);
       $payment_created = $result->response->body->payments;
 
@@ -922,22 +920,33 @@ function uc_gc_client_price_calculate($order, $ucpid, $next_paymentdate, $status
     $currency_arr = uc_gc_client_currency($country_code);
 
     if ($default_currency != $currency_arr['currency']) {
-      $url = "http://api.fixer.io/latest?base=" . $default_currency . "&symbols=" . $currency_arr['currency'];
-      $options = array(
-        'headers' => array('Content-Type' => 'application/json',),
-        'method' => 'GET',
-      );
-      $result = drupal_http_request($url, $options);
 
-      if(isset($result->error)) {
-        drupal_set_message(t('We were unable to obtain a currency exchange rate at this time'), 'warning');
+      //Use fixer.io to provide latest exchange rates for currency conversion.
+      if ($fixer = variable_get('uc_gc_client_fixer', NULL)) {
+        $uri = 'http://data.fixer.io/api/latest?access_key=' . $fixer . '&symbols=' . $default_currency;
+
+        $options = array(
+          'headers' => array('Content-Type' => 'application/json',),
+          'method' => 'GET',
+        );
+        $result = drupal_http_request($uri, $options);
+
+        if(isset($result->error)) {
+          drupal_set_message(t('We were unable to obtain a currency exchange rate at this time'), 'warning');
+        }
+        else {
+          $data = json_decode($result->data);
+          $exchange_rate = $data->rates->$default_currency;
+          if ($default_currency == 'EUR') {
+            $amount = $amount * $exchange_rate;
+          }
+          else $amount = $amount / $exchange_rate;
+
+          drupal_set_message(t('The amount for your purchase has been converted into @sign using current exchange rates at fixer.io', array('@sign' => $currency_arr['sign'])));
+        }
       }
-      else {
-        $data = json_decode($result->data);
-        $exchange_rate = $data->rates->$currency_arr['currency'];
-        $amount = $amount * $exchange_rate;
-        drupal_set_message(t('The amount for your purchase has been converted into @sign using current exchange rates at fixer.io', array('@sign' => $currency_arr['sign'])));
-      }
+      else drupal_set_message(t('API key is missing for fixer.io'), 'warning');
+
       $calcs_arr['currency'] = $currency_arr['currency'];
       $calcs_arr['sign'] = $currency_arr['sign'];
     } 
@@ -985,7 +994,7 @@ function uc_gc_client_mail($key, &$message, $params) {
   switch ($key) {
 
     case 'payment-less-than-one':
-      $message['subject'] = "A payment's Amount was less than @sign1 !";
+      $message['subject'] = t("A payment's Amount was less than @sign1 !", $message_arr);
       $message['body'][] = t("<p>A payment for order <a href='@order_url'>#@order_id</a> has failed because it's amount was less than @sign1.</p>", $message_arr);
       break;
 

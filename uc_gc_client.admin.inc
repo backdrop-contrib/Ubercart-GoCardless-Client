@@ -133,6 +133,20 @@ function uc_gc_client_uc_payment_method_callback($op, &$order, $form = NULL, &$f
         '#default_value' => variable_get('uc_gc_client_currencies'),
         '#description' => t("Use foreign currency, and adjust payment amount for international customers, according to current exchange rates at <a target='new' href='http://fixer.io'>fixer.io</a>. This only applies when the currency of the customer's country is different to the store's default currency. SEPA and /or AutoGiro regions need to be enabled on your GoCardless account for this to work."),
       );
+      $form['global']['uc_gc_client_fixer'] = array(
+        '#type' => 'textfield',
+        '#title' => t('fixer.io'),
+        '#default_value' => variable_get('uc_gc_client_fixer', NULL),
+        '#description' => "API key for fixer.io",
+        '#size' => 40,
+        '#maxlength' => 40,
+        '#states' => array( 
+          'visible' => array(
+            'input[name="uc_gc_client_currencies"]' => array('checked' => TRUE),
+          ),
+        ),
+      );
+
 
       // Payments.
       $form['payments'] = array(
