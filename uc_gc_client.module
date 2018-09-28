@@ -1194,6 +1194,10 @@ function uc_gc_client_currency_format($value, $country_code, $thou = NULL, $dec 
 
 /**
  * Defines an array of countries, currency codes, and GC regions.
+ *
+ * https://www.iban.com/currency-codes for currency codes.
+ * https://www.nationsonline.org/oneworld/country_code_list.htm for country
+ * codes.
  */
 function uc_gc_client_countries_define() {
 
@@ -1208,6 +1212,24 @@ function uc_gc_client_countries_define() {
       'region' => 'autogiro',
       'currency' => 'SEK',
       'sign' => 'kr',
+      'enabled' => '0',
+    ),
+    'AU' => array(
+      'region' => 'becs',
+      'currency' => 'AUD',
+      'sign' => '$',
+      'enabled' => '0',
+    ),
+    'DK' => array(
+      'region' => 'betalingsservice',
+      'currency' => 'DKK',
+      'sign' => 'kr',
+      'enabled' => '0',
+    ),
+    'NZ' => array(
+      'region' => 'becs_nz',
+      'currency' => 'NZD',
+      'sign' => '$',
       'enabled' => '0',
     ),
     'AX' => array(

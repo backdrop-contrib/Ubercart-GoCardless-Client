@@ -376,3 +376,31 @@ function uc_gc_client_update_7003() {
   $countries = uc_gc_client_countries_define();
   variable_set('uc_gc_client_countries', $countries); 
 }
+
+/**
+ * Add country definitions for Denmark, Australia and New Zealand.
+ */
+function uc_gc_client_update_7004() {
+  $countries = variable_get('uc_gc_client_countries');
+  $countries_new = array(
+    'AU' => array(
+      'region' => 'becs',
+      'currency' => 'AUD',
+      'sign' => '$',
+      'enabled' => '0',
+    ),
+    'DK' => array(
+      'region' => 'betalingsservice',
+      'currency' => 'DKK',
+      'sign' => 'kr',
+      'enabled' => '0',
+    ),
+    'NZ' => array(
+      'region' => 'becs_nz',
+      'currency' => 'NZD',
+      'sign' => '$',
+      'enabled' => '0',
+    ),
+  );
+  variable_set('uc_gc_client_countries', array_merge($countries, $countries_new)); 
+}

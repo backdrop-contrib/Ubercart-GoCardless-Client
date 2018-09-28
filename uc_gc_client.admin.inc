@@ -593,15 +593,45 @@ function uc_gc_client_countries_form($form, &$form_state) {
   $default_value = array();
 
   foreach($gc_countries as $gc_code => $gc_country) {
-
     if (isset($uc_countries[$gc_code])) {
-      $countries[$gc_code] = array(
-        $uc_countries[$gc_code]->country_name,
-        $gc_country['region'],
-        $gc_country['sign'],
-      );
-      if ($gc_country['enabled']) $default_value[$gc_code] = TRUE;
+      $country_name = $uc_countries[$gc_code]->country_name;
+      $countries_[$country_name] = $gc_code;
     }
+  }
+  ksort($countries_);
+
+  foreach($countries_ as $name => $gc_code) {
+
+    $region = $gc_countries[$gc_code]['region'];
+    switch ($region) {
+      case 'bacs':
+        $scheme = 'Bacs';
+        break;
+      case 'sepa_core':
+        $scheme = 'SEPA';
+        break;
+      case 'becs':
+        $scheme = 'BECS';
+        break;
+      case 'betalingsservice':
+        $scheme = 'Betalingsservice';
+        break;
+      case 'autogiro':
+        $scheme = 'Autogiro';
+        break;
+      case 'pnz':
+        $scheme = 'PaymentsNZ';
+        break;
+      default:
+        $scheme = $region;
+    }
+
+    $countries[$gc_code] = array(
+      $name,
+      $scheme,
+      $gc_countries[$gc_code]['sign'],
+    );
+    if ($gc_countries[$gc_code]['enabled']) $default_value[$gc_code] = TRUE;
   }
 
   $form = array();

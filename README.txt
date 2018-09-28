@@ -114,7 +114,9 @@ ISSUES
 INTERNATIONAL PAYMENTS
 ----------------------
 
-International payments are enabled at: admin >> store >> settings >> payment >> method >> gc_client.
+The default region for GoCardless.com is the UK, which uses the Bacs direct debit scheme. To use international payments, you must first contact GoCardless, and request that they enable the required region(s), so that you can use the relevant direct debit schemes. Instructions on how to do this are at: https://support.gocardless.com/hc/en-gb/articles/115002833785-Collecting-from-multiple-regions.
+
+Having done this, international payments are enabled at: admin >> store >> settings >> payment >> method >> gc_client.
 
 After enabling international payments, choose which countries GC can handle, 
 at: admin >> store >> settings >> countries >> gocardless.
