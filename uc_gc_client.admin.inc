@@ -529,6 +529,7 @@ function uc_gc_client_node_delete($node) {
 
 /**
  * Implements hook_field_extra_fields().
+ *
  * Adds the "Product information".
  */
 function uc_gc_client_field_extra_fields() {

@@ -487,7 +487,7 @@ function uc_gc_client_payments_form($form, &$form_state, $order) {
 }
 
 /**
- * AJAX callback function for vegbox_change_form  .
+ * AJAX callback function for uc_gc_client_payments_form.
  */
 function uc_gc_client_payments_form_callback(&$form, &$form_state) {
   $order_id = $form_state['values']['order_id'];

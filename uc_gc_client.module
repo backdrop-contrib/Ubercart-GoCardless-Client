@@ -1003,7 +1003,6 @@ function uc_gc_client_mail($key, &$message, $params) {
       $message['body'][] = t("<p>A payment of @amount for order <a href='@order_url'>#@order_id</a> could not be raised because the daily automatic limit of @payment_limit has been exceeded.</p>", $message_arr);
       break;
   }
-
 }
 
 /**

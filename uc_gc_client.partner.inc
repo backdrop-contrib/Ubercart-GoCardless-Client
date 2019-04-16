@@ -15,6 +15,7 @@ function uc_gc_client_get($data) {
   $options['data'] = $data;
   $options['method'] = 'GET';
   $url = variable_get('uc_gc_client_partner_url') . '/gc/client/' . variable_get('uc_gc_client_org_id' . $ext);
+
   $response = drupal_http_request($url, $options);
   $data = json_decode($response->data);
   return $data;

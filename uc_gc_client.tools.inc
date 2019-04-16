@@ -15,7 +15,7 @@ function uc_gc_client_priceshift_form($form, $form_state) {
     ->fields('g')
     ->condition('sandbox', $sandbox)
     ->condition('type', 'P')
-    ->condition('status', 'canceled')
+    ->condition('status', 'canceled', '!=')
     ->orderBy('ucid', 'DESC')
     ->execute()
     ->fetchAll();
