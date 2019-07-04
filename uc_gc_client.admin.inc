@@ -31,6 +31,7 @@ function uc_gc_client_uc_payment_method_callback($op, &$order, $form = NULL, &$f
       $pass = variable_get('uc_gc_client_user_pass' . $ext);
 
       $auth = uc_gc_client_authenticate();
+
       if ($auth == 200) {
         $response = uc_gc_client_get($data = array());
         isset($response->environ) ? $connected = TRUE : $connected = FALSE;
