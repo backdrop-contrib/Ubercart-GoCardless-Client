@@ -173,7 +173,9 @@ function uc_gc_client_redirect($redirect, $mandate, $customer, $order_id, $payme
             'ucpid' => $ucpid,
           ),
         );
-        // Provide hook so that payment details can be altered by another module.
+
+        //Provide hook so that payment details can be altered by another
+        //module.
         $type = 'payment';
         drupal_alter('payment_details', $payment_details, $order, $type);     
         $params = array(

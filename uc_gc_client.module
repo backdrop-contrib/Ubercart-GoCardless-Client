@@ -691,7 +691,7 @@ function uc_gc_client_cron() {
     ->condition('next_payment', REQUEST_TIME, '<=')
     ->execute()
     ->fetchAll();
-  
+
   $payment_limit = variable_get('uc_gc_client_payment_limit', 0);
 
   foreach ($payments as $payment) {
@@ -898,8 +898,8 @@ function uc_gc_client_price_calculate($order, $ucpid, $next_paymentdate, $status
   //Process line items.
   $line_items = 0;
 
-  //If there is just one product in the order we can safely add the total of the line items to 
-  //the amount.
+  //If there is just one product in the order we can safely add the total of
+  // the line items to the amount.
   if($order->product_count == 1) {
     foreach($order->line_items as $item) {
       if($item['type'] == 'subtotal') continue;

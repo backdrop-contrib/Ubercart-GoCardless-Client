@@ -137,69 +137,68 @@ function uc_gc_client_priceshift_form_validate($form, $form_state) {
   }
 }
 
+
 /**
- * Implements hook_form_submit.
+ * Form submission for uc_gc_client_priceshift_form().
  */
 function uc_gc_client_priceshift_form_submit($form, $form_state) {
-
   $operator = $form_state['values']['operator'];
-  if ($operator == 'increase') {
-    $cost_adj = $form_state['values']['cost'];
-    $price_adj = $form_state['values']['price'];
-  }
-  else {
-    $cost_adj = 0 - $form_state['values']['cost'];
-    $price_adj = 0 - $form_state['values']['price'];
-    $price_adj = number_format((float) 0 - $form_state['values']['price'], 2, '.', '');
+  $cost_adj = $form_state['values']['cost'];
+  $price_adj = $form_state['values']['price'];
+  if ($operator == 'decrease') {
+    $cost_adj = -$cost_adj;
+    $price_adj = -$price_adj;
   }
 
   if (!empty($form_state['values']['product'])) {
-
     $product_title = $form_state['values']['product'];
     $subs = $form_state['values']['subs'];
-
     foreach ($subs as $sub) {
       $order = uc_order_load($sub->ucid);
-      $product = &$order->products[$sub->ucpid];
-      if ($product->title == $product_title) {
-
-        $cost_old = uc_currency_format($product->cost);
-        $price_old = uc_currency_format($product->price);
-        $product->cost = $product->cost + $cost_adj;
-        $product->price = $product->price + $price_adj;
-        uc_order_save($order);
-
-        $message = t("Order #@order_id with product: '@product', has had its cost changed from @cost_old to @cost, and its price changed from @price_old to @price.", array('@order_id' => $sub->ucid, '@product' => $product->title, '@cost_old' => $cost_old, '@cost' => uc_currency_format($product->cost), '@price_old' => $price_old, '@price' => uc_currency_format($product->price)));
-        // $count++;.
-        drupal_set_message($message);
-
-        $comment = t("Product '@product' has had its price changed from @price_old to @price.", array('@product' => $product_title, '@price_old' => $price_old, '@price' => uc_currency_format($product->price)));
-        uc_order_comment_save($sub->ucid, $order->uid, $comment, 'order');
-      }
+      uc_gc_client_priceshift_execute($order, $sub->ucpid, $cost_adj, $price_adj, $product_title);
     }
   }
 
   foreach ($form_state['values']['table'] as $ucpid) {
     if (!empty($ucpid)) {
-
       $ucid = db_select('uc_gc_client', 'g')
         ->fields('g', array('ucid'))
         ->condition('ucpid', $ucpid)
         ->execute()
         ->fetchField();
-
       $order = uc_order_load($ucid);
-      $product = &$order->products[$ucpid];
-      $cost_old = uc_currency_format($product->cost);
-      $price_old = uc_currency_format($product->price);
-      $product->cost = $product->cost + $cost_adj;
-      $product->price = $product->price + $price_adj;
-      uc_order_save($order);
-      $message = t("Order #@order_id with product: '@product', has had its cost changed from @cost_old to @cost, and its price changed from @price_old to @price.", array('@order_id' => $ucid, '@product' => $product->title, '@cost_old' => $cost_old, '@cost' => uc_currency_format($product->cost), '@price_old' => $price_old, '@price' => uc_currency_format($product->price)));
-      drupal_set_message($message);
-
-      $comment = t("Product '@product' has had its price changed from @price_old to @price.", array('@product' => $product->title, '@price_old' => $price_old, '@price' => $product->price));
-      uc_order_comment_save($order->order_id, $order->uid, $comment, 'order');
+      uc_gc_client_priceshift_execute($order, $ucpid, $cost_adj, $price_adj);
     }
   }
 }
+
+/**
+ * Execute price shift for the given order product.
+ */
+function uc_gc_client_priceshift_execute($order, $ucpid, $cost_adj, $price_adj, $product_title = FALSE) {
+  $product = $order->products[$ucpid];
+  if (!$product_title || $product->title == $product_title) {
+    $cost_old = uc_currency_format($product->cost);
+    $price_old = uc_currency_format($product->price);
+    $product->cost += $cost_adj;
+    $product->price += $price_adj;
+    uc_order_save($order);
+
+    $message_array = array(
+      '@order_id' => $order->order_id,
+      '@product' => $product->title,
+      '@cost_old' => $cost_old,
+      '@cost' => uc_currency_format($product->cost),
+      '@price_old' => $price_old,
+      '@price' => uc_currency_format($product->price),
+    );
+    $message = t("Order #@order_id with product: '@product', has had its cost changed from @cost_old to @cost, and its price changed from @price_old to @price.", $message_array);
+    drupal_set_message($message);
+
+    $comment = t("Product '@product' has had its price changed from @price_old to @price.", $message_array);
+    uc_order_comment_save($order->order_id, $order->uid, $comment, 'order');
+  }
+}
+
+
+
