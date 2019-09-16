@@ -1231,6 +1231,12 @@ function uc_gc_client_countries_define() {
       'sign' => '$',
       'enabled' => '0',
     ),
+    'US' => array(
+      'region' => 'ach',
+      'currency' => 'USD',
+      'sign' => '$',
+      'enabled' => '0',
+    ),
     'AX' => array(
       'region' => 'sepa_core',
       'currency' => 'EUR',

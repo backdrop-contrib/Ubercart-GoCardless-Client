@@ -404,3 +404,19 @@ function uc_gc_client_update_7004() {
   );
   variable_set('uc_gc_client_countries', array_merge($countries, $countries_new)); 
 }
+
+/**
+ * Add country definition for United States.
+ */
+function uc_gc_client_update_7005() {
+  $countries = variable_get('uc_gc_client_countries');
+  $countries_new = array(
+    'US' => array(
+      'region' => 'ach',
+      'currency' => 'USD',
+      'sign' => '$',
+      'enabled' => '0',
+    ),
+  );
+  variable_set('uc_gc_client_countries', array_merge($countries, $countries_new)); 
+}

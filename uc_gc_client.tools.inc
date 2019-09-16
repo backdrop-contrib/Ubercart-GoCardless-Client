@@ -18,7 +18,7 @@ function uc_gc_client_priceshift_form($form, $form_state) {
     ->condition('status', 'canceled', '!=')
     ->orderBy('ucid', 'DESC')
     ->execute()
-    ->fetchAll();
+    ->fetchAllAssoc('ucpid');
 
   $headers = array('Order ID', 'Product', "Product's Store cost", "Product's Store price", 'Attributes (cost | price)', 'Actual cost', 'Actual price');
   $rows = array();
@@ -33,7 +33,7 @@ function uc_gc_client_priceshift_form($form, $form_state) {
     $uc_product = db_select('uc_products', 'p')
       ->fields('p', array('cost', 'sell_price'))
       ->condition('nid', $product->nid, '=')
-      ->execute()->fetch();
+      ->execute()->fetchAssoc('ucpid');
 
     // Create attribute data.
     $attributes = $product->data['attributes'];
@@ -131,12 +131,10 @@ function uc_gc_client_priceshift_form($form, $form_state) {
  * Implements hook_form_validate.
  */
 function uc_gc_client_priceshift_form_validate($form, $form_state) {
-
   if (empty($form_state['values']['operator'])) {
     form_set_error('operator', t('Please specify operation'));
   }
 }
-
 
 /**
  * Form submission for uc_gc_client_priceshift_form().
@@ -149,24 +147,17 @@ function uc_gc_client_priceshift_form_submit($form, $form_state) {
     $cost_adj = -$cost_adj;
     $price_adj = -$price_adj;
   }
-
+  $subs = $form_state['values']['subs'];
   if (!empty($form_state['values']['product'])) {
     $product_title = $form_state['values']['product'];
-    $subs = $form_state['values']['subs'];
     foreach ($subs as $sub) {
       $order = uc_order_load($sub->ucid);
       uc_gc_client_priceshift_execute($order, $sub->ucpid, $cost_adj, $price_adj, $product_title);
     }
   }
-
   foreach ($form_state['values']['table'] as $ucpid) {
     if (!empty($ucpid)) {
-      $ucid = db_select('uc_gc_client', 'g')
-        ->fields('g', array('ucid'))
-        ->condition('ucpid', $ucpid)
-        ->execute()
-        ->fetchField();
-      $order = uc_order_load($ucid);
+      $order = uc_order_load($subs[$ucpid]->ucid);
       uc_gc_client_priceshift_execute($order, $ucpid, $cost_adj, $price_adj);
     }
   }
@@ -199,6 +190,3 @@ function uc_gc_client_priceshift_execute($order, $ucpid, $cost_adj, $price_adj, 
     uc_order_comment_save($order->order_id, $order->uid, $comment, 'order');
   }
 }
-
-
-
