@@ -6,7 +6,7 @@
  */
 
 /**
- * Implements hook_form.
+ * Implements hook_form().
  */
 function uc_gc_client_priceshift_form($form, $form_state) {
 
@@ -20,7 +20,15 @@ function uc_gc_client_priceshift_form($form, $form_state) {
     ->execute()
     ->fetchAllAssoc('ucpid');
 
-  $headers = array('Order ID', 'Product', "Product's Store cost", "Product's Store price", 'Attributes (cost | price)', 'Actual cost', 'Actual price');
+  $headers = array(
+    'Order ID',
+    'Product',
+    'Product\'s Store cost',
+    'Product\'s Store price',
+    'Attributes (cost | price)',
+    'Actual cost',
+    'Actual price',
+  );
   $rows = array();
   $product_select = array();
 
@@ -48,7 +56,12 @@ function uc_gc_client_priceshift_form($form, $form_state) {
           $attr_cost = uc_currency_format($option_array['cost']);
           $attr_price = uc_currency_format($option_array['price']);
 
-          $line = t('@attr_key->@option_value: @attr_cost | @attr_price<br>', array('@attr_key' => $attr_key, '@option_value' => $option_value, '@attr_cost' => $attr_cost, '@attr_price' => $attr_price));
+          $line = t('@attr_key->@option_value: @attr_cost | @attr_price<br>', array(
+            '@attr_key' => $attr_key,
+            '@option_value' => $option_value,
+            '@attr_cost' => $attr_cost,
+            '@attr_price' => $attr_price,
+          ));
           $attr_row .= $line;
         }
       }
@@ -128,7 +141,7 @@ function uc_gc_client_priceshift_form($form, $form_state) {
 }
 
 /**
- * Implements hook_form_validate.
+ * Implements hook_form_validate().
  */
 function uc_gc_client_priceshift_form_validate($form, $form_state) {
   if (empty($form_state['values']['operator'])) {

@@ -1,6 +1,11 @@
 <?php
 
 /**
+ * @file
+ * Defines a token for use by modules.
+ */
+
+/**
  * Implements hook_token_info().
  */
 function uc_gc_client_token_info() {
@@ -37,14 +42,16 @@ function uc_gc_client_tokens($type, $tokens, $data = array(), $options = array()
       switch ($name) {
 
         case 'order-total-int':
-          if(isset($order->data['initial_payment'])) 
+          if (isset($order->data['initial_payment'])) {
             $replacements[$original] = $order->data['initial_payment'];
-          else $replacements[$original] = uc_currency_format($order->order_total, variable_get('uc_currency_sign'));
-        break;
+          }
+          else {
+            $replacements[$original] = uc_currency_format($order->order_total, variable_get('uc_currency_sign'));
+          }
+          break;
 
       }
     }
   }
   return $replacements;
 }
-                                   

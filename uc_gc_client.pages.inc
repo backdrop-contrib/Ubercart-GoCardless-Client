@@ -28,7 +28,6 @@ function uc_gc_client_redirect($redirect, $mandate, $customer, $order_id, $payme
   uc_order_comment_save($order_id, $uid, $comment, 'order', 'Pending', TRUE);
   drupal_set_message($comment);
 
-
   // @todo Apply some logic here to group products into single payments / subscriptions if applicable
 
   // Set up seperate payments / subscriptions for each product in cart.
@@ -114,7 +113,7 @@ function uc_gc_client_redirect($redirect, $mandate, $customer, $order_id, $payme
       );
       // Provide hook so that payment details can be altered by another module.
       $type = 'subscription';
-      drupal_alter('payment_details', $payment_details, $order, $type);     
+      drupal_alter('payment_details', $payment_details, $order, $type);
 
       $params = array(
         'endpoint' => 'subscriptions',
@@ -156,14 +155,15 @@ function uc_gc_client_redirect($redirect, $mandate, $customer, $order_id, $payme
     // If it is not a subscription.
     elseif ($gc_type != 'S') {
 
-      // If raise_payment is set for the product then raise the first payment immediately.
+      // If raise_payment is set for the product then raise the first payment
+      // immediately.
       if ($product_uc->raise_payment) {
 
         $calculate = uc_gc_client_price_calculate($order, $product->order_product_id, $next_paymentdate = NULL, $status = NULL);
         $currency_code = isset($calculate['currency']) ? $calculate['currency'] : variable_get('uc_currency_code');
         $currency_sign = isset($calculate['sign']) ? $calculate['sign'] : variable_get('uc_currency_sign');
         $order->data['initial_payment'] = uc_currency_format($calculate['amount'], $currency_sign);
-        uc_order_save($order);  
+        uc_order_save($order);
 
         $payment_details = array(
           'amount' => $calculate['amount'],
@@ -174,10 +174,10 @@ function uc_gc_client_redirect($redirect, $mandate, $customer, $order_id, $payme
           ),
         );
 
-        //Provide hook so that payment details can be altered by another
-        //module.
+        // Provide hook so that payment details can be altered by another
+        // module.
         $type = 'payment';
-        drupal_alter('payment_details', $payment_details, $order, $type);     
+        drupal_alter('payment_details', $payment_details, $order, $type);
         $params = array(
           'endpoint' => 'payments',
           'action' => 'create',
@@ -214,8 +214,8 @@ function uc_gc_client_redirect($redirect, $mandate, $customer, $order_id, $payme
           drupal_set_message($comment);
 
           // Provide a hook so that other modules can respond to payment
-          //creation.
-          module_invoke_all('payment_created', $payment, $order_id);     
+          // creation.
+          module_invoke_all('payment_created', $payment, $order_id);
         }
         else {
           drupal_set_message(t('An initial payment could not be created because authentication failed. We will try and raise it again later.'), 'error');
@@ -232,7 +232,8 @@ function uc_gc_client_redirect($redirect, $mandate, $customer, $order_id, $payme
         }
       }
 
-      //Else if a start date is set for the product then defer the first payment creation.
+      // Else if a start date is set for the product then defer the first
+      // payment creation.
       elseif (!is_null($start_date)) {
 
         // Update next_payment field in uc_gcsubs table.
@@ -245,14 +246,17 @@ function uc_gc_client_redirect($redirect, $mandate, $customer, $order_id, $payme
           ->execute();
 
         $calculate = uc_gc_client_price_calculate($order, $product->order_product_id, $next_paymentdate = NULL, $status = NULL);
-        //$calculate['amount'] = $product->price;
+        // $calculate['amount'] = $product->price;.
         $currency_code = isset($calculate['currency']) ? $calculate['currency'] : variable_get('uc_currency_code');
         $currency_sign = isset($calculate['sign']) ? $calculate['sign'] : variable_get('uc_currency_sign');
         $order->data['initial_payment'] = uc_currency_format($calculate['amount'], $currency_sign);
-        uc_order_save($order);  
+        uc_order_save($order);
 
         // Let everyone know what is going on.
-        $comment = t('A payment for @amount will be created with GoCardless on @start_date.', array('@amount' => uc_currency_format($calculate['amount'], $currency_sign), '@start_date' => format_date($start_date, 'uc_store')));
+        $comment = t('A payment for @amount will be created with GoCardless on @start_date.', array(
+          '@amount' => uc_currency_format($calculate['amount'], $currency_sign),
+          '@start_date' => format_date($start_date, 'uc_store'),
+        ));
         uc_order_comment_save($order_id, $uid, $comment, 'order', 'Pending', TRUE);
         drupal_set_message($comment);
       }
@@ -265,39 +269,75 @@ function uc_gc_client_redirect($redirect, $mandate, $customer, $order_id, $payme
 }
 
 /**
+ * Fetch all HTTP request headers.
+ *
+ * Required for Nginx servers that do not support getallheaders().
+ *
+ * @return mixed
+ *   An associative array of all the HTTP headers in the current request, or
+ *   FALSE on failure.
+ */
+function uc_gc_client_getallheaders() {
+  $headers = array();
+  foreach ($_SERVER as $name => $value) {
+    if (substr($name, 0, 5) == 'HTTP_') {
+      $headers[str_replace(' ', '-', ucwords(strtolower(str_replace('_', ' ', substr($name, 5)))))] = $value;
+    }
+  }
+  return $headers;
+}
+
+/**
+ * Timing attack safe string comparison.
+ *
+ * Compares two strings using the same time whether they're equal or not.
+ * Required when hash_equals() function is not present (PHP < 5.6.0).
+ *
+ * @param string $known_string
+ *   The string of known length to compare against.
+ * @param string $user_string
+ *   The user-supplied string.
+ *
+ * @return bool
+ *   Returns TRUE when the two strings are equal, FALSE otherwise.
+ */
+function uc_gc_client_hash_equals($known_string, $user_string) {
+  $ret = 0;
+  if (strlen($known_string) !== strlen($user_string)) {
+    $user_string = $known_string;
+    $ret = 1;
+  }
+  $res = $known_string ^ $user_string;
+  for ($i = strlen($res) - 1; $i >= 0; --$i) {
+    $ret |= ord($res[$i]);
+  }
+  return !$ret;
+}
+
+/**
  * Menu callback; respond to a webhook from GoCardless.com.
  */
 function uc_gc_client_webhook() {
 
   variable_get('uc_gc_client_sandbox') ? $secret = variable_get('uc_gc_client_webhook_sandbox') : $secret = variable_get('uc_gc_client_webhook_live');
   $webhook = file_get_contents('php://input');
-
-  if (!function_exists('getallheaders')) {
-    function getallheaders() {
-      $headers = [];
-      foreach ($_SERVER as $name => $value) {
-        if (substr($name, 0, 5) == 'HTTP_') {
-          $headers[str_replace(' ', '-', ucwords(strtolower(str_replace('_', ' ', substr($name, 5)))))] = $value;
-        }
-      }
-      return $headers;
-    }
-  }
-
-  $headers = getallheaders();
+  $headers = function_exists('getallheaders') ? getallheaders() : uc_gc_client_getallheaders();
   $provided_signature = $headers["Webhook-Signature"];
   $calculated_signature = hash_hmac("sha256", $webhook, $secret);
-  if ($provided_signature == $calculated_signature) {
+
+  $hash_equals_function = function_exists('hash_equals') ? 'hash_equals' : 'uc_gc_client_hash_equals';
+  if ($hash_equals_function($provided_signature, $calculated_signature)) {
 
     $data = json_decode($webhook, TRUE);
 
     // Optionally write webhook to log.
     if (variable_get('uc_gc_client_debug_webhook', FALSE)) {
-      watchdog("uc_gc_client", '<pre>GoCardless webhook: <br />' . print_r($data, TRUE) . '</pre>');
+      $message = '<pre>' . t('GoCardless webhook:') . '<br />' . print_r($data, TRUE) . '</pre>';
+      watchdog("uc_gc_client", $message);
     }
 
-    //Send a success header before processing webhooks, in order to
-    //prevent timeouts.
+    // Send a success header before processing webhooks, in order to
+    // prevent timeouts.
     header('HTTP/1.1 200 OK');
 
     // Process the events.
@@ -408,9 +448,8 @@ function uc_gc_client_webhook_mandates($order, $action, $event) {
         uc_order_comment_save($order->order_id, $order->uid, $comment, 'order', 'canceled', TRUE);
 
         uc_order_update_status($order->order_id, 'canceled');
-        //$order->order_status = 'canceled';
-        //uc_order_save($order);
-
+        // $order->order_status = 'canceled';
+        // uc_order_save($order);
         $update = db_update('uc_gc_client')
           ->fields(array(
             'status' => 'canceled',
@@ -445,14 +484,14 @@ function uc_gc_client_webhook_payments($order, $action, $event, $resource) {
 
   $mandate = $resource->links->mandate;
   $order_id = $order->order_id;
-  $amount = $resource->amount/100;
+  $amount = $resource->amount / 100;
   $status = db_select('uc_orders', 'o')
     ->fields('o', array('order_status'))
     ->condition('order_id', $order_id)
     ->execute()->fetchField();
-  
+
   !empty($order->billing_country) ? $country_code = $order->billing_country : $country_code = $order->delivery_country;
-  $currency_sign = uc_gc_client_currency($country_code)['sign']; 
+  $currency_sign = uc_gc_client_currency($country_code)['sign'];
 
   switch ($action) {
 
@@ -460,13 +499,17 @@ function uc_gc_client_webhook_payments($order, $action, $event, $resource) {
       uc_payment_enter($order_id, 'gc_client', $amount, 0, NULL, t('Direct debit has been taken by GoCardless'));
       $comment = t('Your payment of @amount has been confirmed by GoCardless and will be paid from your bank account.', array('@amount' => uc_currency_format($amount, $currency_sign)));
       uc_order_comment_save($order_id, 0, $comment, 'order', $status, TRUE);
-      //Update status to payment_received if it is the first one
-      if ($order->order_status == 'mandate_active') 
+      // Update status to payment_received if it is the first one.
+      if ($order->order_status == 'mandate_active') {
         uc_order_update_status($order->order_id, 'payment_received');
+      }
       break;
 
     case 'cancelled':
-      $comment = t("Your direct debit payment '@id' for @amount has been cancelled at GoCardless.", array('@id' => $event['id'], '@amount' => uc_currency_format($amount, $currency_sign)));
+      $comment = t("Your direct debit payment '@id' for @amount has been cancelled at GoCardless.", array(
+        '@id' => $event['id'],
+        '@amount' => uc_currency_format($amount, $currency_sign),
+      ));
       uc_order_comment_save($order_id, 0, $comment, 'order', $status, TRUE);
       break;
   }
@@ -476,32 +519,4 @@ function uc_gc_client_webhook_payments($order, $action, $event, $resource) {
  * Processes 'subscription' webhooks.
  */
 function uc_gc_client_webhook_subscriptions($order, $action, $event) {
-  /*
-  switch ($action) {
-
-  case 'cancelled' :
-  foreach ($items as $item) {
-  isset($item['source_id']) ? $gc_order_id = $item['source_id'] : $gc_order_id = $item['id'];
-  $order_id = uc_gc_client_id($gc_order_id);
-  $order = uc_order_load($order_id);
-  uc_order_update_status($order_id, 'canceled');
-  uc_order_comment_save($order_id, $order->uid, t('This direct debit Subscription has been cancelled with GoCardless.com.'), 'order', 'canceled', TRUE);
-  // update the status on the database
-  $update = db_update('uc_gcsubs')
-  ->fields(array(
-  'status' => 'canceled',
-  'updated' => time(),
-  ))
-  ->condition('ucid', $order_id, '=')
-  ->execute();
-  }
-
-  // Invoke Rules event
-  //if (module_exists('rules')) {
-  //  $items_string = json_encode($items);
-  //  rules_invoke_event('uc_gcsubs_subs_cancellation', $items_string);
-  //}
-  break;
-  }
-   */
 }

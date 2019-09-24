@@ -2,20 +2,19 @@
 
 /**
  * @file
- * Provides an integration with GoCardless.com for the Ubercart module
+ * Provides an integration with GoCardless.com for the Ubercart module.
  */
 
 require_once dirname(__FILE__) . '/uc_gc_client.admin.inc';
 require_once dirname(__FILE__) . '/uc_gc_client.partner.inc';
 require_once dirname(__FILE__) . '/uc_gc_client.mandates.inc';
 require_once dirname(__FILE__) . '/uc_gc_client.tools.inc';
-// If (module_exists('uc_recurring')) require_once dirname(__FILE__) . '/uc_gcsubs.recurring.inc';.
 if (module_exists('rules')) {
   require_once dirname(__FILE__) . '/uc_gc_client.rules.inc';
 }
 
 /**
- * Implements hook_menu()
+ * Implements hook_menu().
  */
 function uc_gc_client_menu() {
 
@@ -93,7 +92,7 @@ function uc_gc_client_menu() {
  *
  * Removes the Payments tab from an order's View pane if the module is
  * configured to do this on the settings form, or if the payment type is
- * not GoCardless
+ * not GoCardless.
  */
 function uc_gc_client_menu_local_tasks_alter(&$data, $router_item, $root_path) {
 
@@ -178,7 +177,6 @@ function uc_gc_client_element_info() {
  */
 function uc_gc_client_process_address_field($element, $form_state) {
 
-  
   $uc_countries = db_select('uc_countries', 'u')
     ->fields('u')
     ->condition('version', 0, '>')
@@ -186,7 +184,7 @@ function uc_gc_client_process_address_field($element, $form_state) {
 
   $gc_countries = variable_get('uc_gc_client_countries');
   $enabled_countries = array();
-  foreach($gc_countries as $gc_code => $gc_country) {
+  foreach ($gc_countries as $gc_code => $gc_country) {
     if ($gc_country['enabled'] && isset($uc_countries[$gc_code])) {
       $enabled_countries[$uc_countries[$gc_code]->country_id] = $uc_countries[$gc_code]->country_name;
     }
@@ -196,7 +194,6 @@ function uc_gc_client_process_address_field($element, $form_state) {
   $element[$element['#key_prefix'] . '_country']['#options'] = $enabled_countries;
   return $element;
 }
-
 
 /**
  * Implements hook_form_FORM_ID_alter().
@@ -214,23 +211,24 @@ function uc_gc_client_form_uc_cart_checkout_form_alter(&$form, &$form_state, $fo
 
     if ($order->payment_method == 'gc_client') {
 
-      //Change the address fieldsets to a bespoke type that has countries
-      //filtered to only include GC enabled countries.
-      //if (variable_get('uc_gc_client_currencies')) {
-        if (isset($form['panes']['delivery']))
-          $form['panes']['delivery']['address']['#type'] = 'uc_gc_client_address';
-        if (isset($form['panes']['billing']))
-          $form['panes']['billing']['address']['#type'] = 'uc_gc_client_address';
-      //}
-
-      //Optional checkout review selected. (This should only be selected
-      //if GC is the only enabled payment method.)
+      // Change the address fieldsets to a bespoke type that has countries
+      // filtered to only include GC enabled countries.
+      // if (variable_get('uc_gc_client_currencies')) {.
+      if (isset($form['panes']['delivery'])) {
+        $form['panes']['delivery']['address']['#type'] = 'uc_gc_client_address';
+      }
+      if (isset($form['panes']['billing'])) {
+        $form['panes']['billing']['address']['#type'] = 'uc_gc_client_address';
+      }
+      // }
+      // Optional checkout review selected. (This should only be selected
+      // if GC is the only enabled payment method.)
       if (variable_get('uc_gc_client_optional_checkout_review', FALSE)) {
 
         $form['actions']['continue']['#value'] = variable_get('uc_gc_client_checkout_label');
         $form['#submit'][] = 'uc_gc_client_checkout_form_submit';
       }
-    } 
+    }
   }
 }
 
@@ -244,8 +242,8 @@ function uc_gc_client_form_uc_cart_checkout_review_form_alter(&$form, &$form_sta
 
     $order = uc_order_load($order_id);
 
-    //This allows you to omit the Payment method pane, and is safe because
-    //you would only do if you had just one payment method enabled.
+    // This allows you to omit the Payment method pane, and is safe because
+    // you would only do if you had just one payment method enabled.
     if (!isset($order->payment_method) || empty($order->payment_method)) {
       $order->payment_method = 'gc_client';
       uc_order_save($order);
@@ -273,7 +271,10 @@ function uc_gc_client_checkout_form_submit($form, $form_state) {
  *
  * Returns the elements for the checkout review form.
  */
-//function uc_gc_client_checkout_review_form($form_state, $order = FALSE) {
+
+/**
+ * Function uc_gc_client_checkout_review_form($form_state, $order = FALSE) {.
+ */
 function uc_gc_client_checkout_review_form($form_state, $order) {
 
   $order_id = $order['build_info']['args']['0']->order_id;
@@ -313,7 +314,7 @@ function uc_gc_client_form_submit($form, $form_state) {
     $order_id = $order->order_id;
     $mandate_details = uc_gc_client_mandate_details($order);
   }
-  
+
   $auth = uc_gc_client_authenticate();
   if ($auth == 200) {
     $data = array(
@@ -366,7 +367,7 @@ function uc_gc_client_mandate_details($order) {
 
   $valid_countries = variable_get('uc_gc_client_countries');
   if (!isset($valid_countries[$country_code])) {
-    drupal_set_message(t('Sorry, this country is not avaialable to GoCardless right now.'),'warning');
+    drupal_set_message(t('Sorry, this country is not avaialable to GoCardless right now.'), 'warning');
     drupal_goto($_SERVER['HTTP_REFERER']);
   }
 
@@ -461,7 +462,9 @@ function uc_gc_client_uc_add_to_cart_data($form_values) {
     foreach ($form_values['node']->attributes as $att_value) {
       if ($att_value->name == 'Interval') {
         $option_id = $attributes[$att_value->aid];
-        if(isset($option_id)) $attr_option = $att_value->options[$option_id]->name;
+        if (isset($option_id)) {
+          $attr_option = $att_value->options[$option_id]->name;
+        }
       }
     }
   }
@@ -476,7 +479,7 @@ function uc_gc_client_uc_add_to_cart_data($form_values) {
       'unit_gc' => $extras['interval_unit'] . 'ly',
     );
   }
-  
+
   // Add GC type.
   if (isset($extras['type'])) {
     $extras['type'] == 'S' ? $gc_type = 'subscription' : $gc_type = 'payment';
@@ -631,10 +634,10 @@ function uc_gc_client_pane_cancel_button($op, $order, &$form = NULL, &$form_stat
       if (user_access('view own invoices')) {
         return drupal_get_form('uc_gc_client_pane_cancel_form', $order);
       }
-      //case 'view':
-      //if (user_access('view own invoices')) {
-      //return drupal_get_form('uc_gc_client_pane_cancel_form', $order);
-      //}
+      // Case 'view':
+      // if (user_access('view own invoices')) {
+      // return drupal_get_form('uc_gc_client_pane_cancel_form', $order);
+      // }.
   }
 }
 
@@ -674,12 +677,12 @@ function uc_gc_client_pane_cancel_form_submit($form, &$form_state) {
  */
 function uc_gc_client_cron() {
 
-  //Postpone the operation if there is already an instance of 
-  //uc_gc_client_cron running, to mitigate against the possibility of extra
-  //payments being created in error. This can happen if cron takes more than
-  //240s to complete.
+  // Postpone the operation if there is already an instance of
+  // uc_gc_client_cron running, to mitigate against the possibility of extra
+  // payments being created in error. This can happen if cron takes more than
+  // 240s to complete.
   if (!lock_acquire('uc_gc_client_cron', 3600)) {
-    watchdog('uc_gc_client', 'GoCardless payments could not be created becasue there is already an instance of cron running', array(), WATCHDOG_WARNING); 
+    watchdog('uc_gc_client', 'GoCardless payments could not be created becasue there is already an instance of cron running', array(), WATCHDOG_WARNING);
     return;
   }
 
@@ -705,9 +708,11 @@ function uc_gc_client_cron() {
     );
     $result = uc_gc_client_api($params);
 
-    if (isset($result->response)) $mandate = $result->response->body->mandates;
-    if (!isset($mandate) || in_array($mandate->status, array('cancelled','failed'))) {
-      $watchdog = t('Order #@ucid: Payment creation error.', array('@ucid' => $payment->ucid,));
+    if (isset($result->response)) {
+      $mandate = $result->response->body->mandates;
+    }
+    if (!isset($mandate) || in_array($mandate->status, array('cancelled', 'failed'))) {
+      $watchdog = t('Order #@ucid: Payment creation error.', array('@ucid' => $payment->ucid));
       watchdog('uc_gc_client', $watchdog, NULL, WATCHDOG_ERROR);
       continue;
     }
@@ -741,9 +746,10 @@ function uc_gc_client_cron() {
 
       if ($count >= $payment_limit) {
 
-        $message = t("Payment for @amount has not been created because the daily payment limit of @payment_limit has been exceeded for the order.", array('@amount' => uc_currency_format($amount, $currency_sign), '@payment_limit' => $payment_limit));
-        //uc_order_comment_save($order->order_id, $order->uid, $message, 'order');
-
+        $message = t("Payment for @amount has not been created because the daily payment limit of @payment_limit has been exceeded for the order.", array(
+          '@amount' => uc_currency_format($amount, $currency_sign),
+          '@payment_limit' => $payment_limit,
+        ));
         $watchdog_array = array(
           '@amount' => uc_currency_format($amount, $currency_sign),
           '@order_id' => $order->order_id,
@@ -772,20 +778,28 @@ function uc_gc_client_cron() {
       'metadata' => ['ucpid' => $payment->ucpid],
     );
 
-    // Invoke hook_payment_details_alter so that payment details can be 
-    //altered by another module.
+    // Invoke hook_payment_details_alter so that payment details can be
+    // altered by another module.
     $type = 'scheduled';
-    drupal_alter('payment_details', $payment_details, $order, $type);     
+    drupal_alter('payment_details', $payment_details, $order, $type);
     $amount = $payment_details['amount'];
     $name = $payment_details['name'];
     $metadata = $payment_details['metadata'];
 
     // Validate the payment amount before creating.
     if ($amount < 1 && $amount != 0) {
-      $message = t("Payment for @amount has not been created because it is less than @minimum.", array('@minimum' => uc_currency_format(1, $currency_sign), '@amount' => uc_currency_format($amount, $currency_sign)));
+      $message = t("Payment for @amount has not been created because it is less than @minimum.", array(
+        '@minimum' => uc_currency_format(1, $currency_sign),
+        '@amount' => uc_currency_format($amount, $currency_sign),
+      ));
       uc_order_comment_save($order->order_id, $order->uid, $message, 'order');
 
-      $watchdog = t("Payment for @amount for order #@order_id has not been created on user #@uid's account because it is less than @minimum.", array('@minimum' => uc_currency_format(1, $currency_sign), '@amount' => uc_currency_format($amount, $currency_sign), '@order_id' => $order->order_id, '@uid' => $order->uid));
+      $watchdog = t("Payment for @amount for order #@order_id has not been created on user #@uid's account because it is less than @minimum.", array(
+        '@minimum' => uc_currency_format(1, $currency_sign),
+        '@amount' => uc_currency_format($amount, $currency_sign),
+        '@order_id' => $order->order_id,
+        '@uid' => $order->uid,
+      ));
       watchdog('uc_gc_client', $watchdog, array(), WATCHDOG_WARNING);
 
       // Send a warning email to admin.
@@ -798,7 +812,11 @@ function uc_gc_client_cron() {
       $message = t("No payment created because scheduled amount is @sign0.", array('@sign' => $currency_sign));
       uc_order_comment_save($order->order_id, $order->uid, $message, 'order');
 
-      $watchdog = t("No payment created for order #@order_id on user #@uid's account because the amount is @sign0.", array('@order_id' => $order->order_id, '@uid' => $order->uid, '@sign' => $currency_sign));
+      $watchdog = t("No payment created for order #@order_id on user #@uid's account because the amount is @sign0.", array(
+        '@order_id' => $order->order_id,
+        '@uid' => $order->uid,
+        '@sign' => $currency_sign,
+      ));
       watchdog('uc_gc_client', $watchdog, array(), WATCHDOG_WARNING);
     }
 
@@ -816,14 +834,22 @@ function uc_gc_client_cron() {
       $result = uc_gc_client_api($params);
       $payment_created = $result->response->body->payments;
 
-      $comment = t('Payment for @amount has been created with GoCardless and will be made from your account on @charge_date.', array('@amount' => uc_currency_format($amount, $currency_sign), '@charge_date' => format_date(strtotime($payment_created->charge_date), 'uc_store')));
+      $comment = t('Payment for @amount has been created with GoCardless and will be made from your account on @charge_date.', array(
+        '@amount' => uc_currency_format($amount, $currency_sign),
+        '@charge_date' => format_date(strtotime($payment_created->charge_date), 'uc_store'),
+      ));
       uc_order_comment_save($order->order_id, $order->uid, $comment, 'order', 'Pending', TRUE);
 
       $watchdog = "Payment for @amount for order #@order_id has been created with GoCardless and will be taken from user #@uid's account on @charge_date.";
-      watchdog('uc_gc_client', $watchdog, array('@amount' => uc_currency_format($amount, $currency_sign), '@order_id' => $order->order_id, '@uid' => $order->uid, '@charge_date' => format_date(strtotime($payment_created->charge_date), 'uc_store')), WATCHDOG_INFO);
+      watchdog('uc_gc_client', $watchdog, array(
+        '@amount' => uc_currency_format($amount, $currency_sign),
+        '@order_id' => $order->order_id,
+        '@uid' => $order->uid,
+        '@charge_date' => format_date(strtotime($payment_created->charge_date), 'uc_store'),
+      ), WATCHDOG_INFO);
 
       // Provide a hook so that other modules can respond to payment creation.
-      module_invoke_all('payment_created', $payment_created, $order->order_id);     
+      module_invoke_all('payment_created', $payment_created, $order->order_id);
     }
 
     // Update next_payment field in uc_gc_client table.
@@ -863,7 +889,7 @@ function uc_gc_client_cron() {
  */
 function uc_gc_client_price_calculate($order, $ucpid, $next_paymentdate, $status, $data = FALSE) {
 
-  //Process scheduled adjustments. 
+  // Process scheduled adjustments.
   $query = db_select('uc_gc_client_schedules', 's');
   $query->join('uc_gc_client_schedules_adjs', 'a', 'a.sid = s.sid');
   $adjustments = $query
@@ -886,7 +912,7 @@ function uc_gc_client_price_calculate($order, $ucpid, $next_paymentdate, $status
     $adjs_total = $adjs_total + $adj->amount;
   }
 
-  //Factor in price multiplier
+  // Factor in price multiplier.
   $product = $order->products[$ucpid];
   if (isset($product->data['price_x'])) {
     !is_null($product->data['price_x']) ? $price_x = $product->data['price_x'] : $price_x = 1;
@@ -895,24 +921,25 @@ function uc_gc_client_price_calculate($order, $ucpid, $next_paymentdate, $status
     $price_x = 1;
   }
 
-  //Process line items.
+  // Process line items.
   $line_items = 0;
 
-  //If there is just one product in the order we can safely add the total of
+  // If there is just one product in the order we can safely add the total of
   // the line items to the amount.
-  if($order->product_count == 1) {
-    foreach($order->line_items as $item) {
-      if($item['type'] == 'subtotal') continue;
+  if ($order->product_count == 1) {
+    foreach ($order->line_items as $item) {
+      if ($item['type'] == 'subtotal') {
+        continue;
+      }
       $line_items = $line_items + $item['amount'];
     }
   }
 
-  //Todo add extra rules here for handling line item amounts
-  
+  // Todo add extra rules here for handling line item amounts.
   $data ? $amount = $data['amount'] : $amount = $product->price;
   $amount = ($amount + $adjs_total + $line_items) * $price_x;
 
-  //Modify payment amount and currency if international customer
+  // Modify payment amount and currency if international customer.
   if (variable_get('uc_gc_client_currencies')) {
     $default_currency = variable_get('uc_currency_code');
 
@@ -921,17 +948,17 @@ function uc_gc_client_price_calculate($order, $ucpid, $next_paymentdate, $status
 
     if ($default_currency != $currency_arr['currency']) {
 
-      //Use fixer.io to provide latest exchange rates for currency conversion.
+      // Use fixer.io to provide latest exchange rates for currency conversion.
       if ($fixer = variable_get('uc_gc_client_fixer', NULL)) {
         $uri = 'http://data.fixer.io/api/latest?access_key=' . $fixer . '&symbols=' . $default_currency;
 
         $options = array(
-          'headers' => array('Content-Type' => 'application/json',),
+          'headers' => array('Content-Type' => 'application/json'),
           'method' => 'GET',
         );
         $result = drupal_http_request($uri, $options);
 
-        if(isset($result->error)) {
+        if (isset($result->error)) {
           drupal_set_message(t('We were unable to obtain a currency exchange rate at this time'), 'warning');
         }
         else {
@@ -940,16 +967,20 @@ function uc_gc_client_price_calculate($order, $ucpid, $next_paymentdate, $status
           if ($default_currency == 'EUR') {
             $amount = $amount * $exchange_rate;
           }
-          else $amount = $amount / $exchange_rate;
+          else {
+            $amount = $amount / $exchange_rate;
+          }
 
           drupal_set_message(t('The amount for your purchase has been converted into @sign using current exchange rates at fixer.io', array('@sign' => $currency_arr['sign'])));
         }
       }
-      else drupal_set_message(t('API key is missing for fixer.io'), 'warning');
+      else {
+        drupal_set_message(t('API key is missing for fixer.io'), 'warning');
+      }
 
       $calcs_arr['currency'] = $currency_arr['currency'];
       $calcs_arr['sign'] = $currency_arr['sign'];
-    } 
+    }
   }
   $calcs_arr['name'] = 'Payment for Order #' . $order->order_id;
   $calcs_arr['price'] = $product->price;
@@ -965,14 +996,14 @@ function uc_gc_client_price_calculate($order, $ucpid, $next_paymentdate, $status
 /*
 function uc_gc_client_uc_order_product_delete($order_product) {
 
-  $ucid = $order_product->order_id;
+$ucid = $order_product->order_id;
 
-  // Delete record from gc_client table if there is one for the order.
-  $db_delete = db_delete('uc_gc_client')
-    ->condition('ucid', $ucid, '=')
-    ->execute();
+// Delete record from gc_client table if there is one for the order.
+$db_delete = db_delete('uc_gc_client')
+->condition('ucid', $ucid, '=')
+->execute();
 }
-*/
+ */
 
 /**
  * Implements hook_mail().
@@ -1027,11 +1058,13 @@ function uc_gc_client_uc_order($op, $order, $arg2) {
 
   switch ($op) {
 
-    case 'update' :
-      if ($arg2 == 'canceled') uc_gc_client_uc_order_cancel($order);
+    case 'update':
+      if ($arg2 == 'canceled') {
+        uc_gc_client_uc_order_cancel($order);
+      }
       break;
 
-    case 'delete' :
+    case 'delete':
       uc_gc_client_uc_order_delete($order);
       break;
   }
@@ -1043,7 +1076,9 @@ function uc_gc_client_uc_order($op, $order, $arg2) {
 function uc_gc_client_uc_order_delete($order) {
 
   // Cancel GoCardless mandate first if order status is not canceled.
-  if ($order->order_status != 'canceled') uc_gc_client_uc_order_cancel($order); 
+  if ($order->order_status != 'canceled') {
+    uc_gc_client_uc_order_cancel($order);
+  }
 
   db_delete('uc_gc_client')
     ->condition('ucid', $order->order_id)
@@ -1069,7 +1104,9 @@ function uc_gc_client_uc_order_cancel($order) {
     ->condition('status', 'canceled', '!=')
     ->execute()->fetch();
 
-  if (empty($gc_client)) return;
+  if (empty($gc_client)) {
+    return;
+  }
 
   $params = array(
     'endpoint' => 'mandates',
@@ -1150,51 +1187,55 @@ function gc_client_element_validate_integer_positive_zero($element, &$form_state
 /**
  * Returns currency information.
  *
- * @param $country_code
+ * @param string $country_code
  *   The country either as an ISO Numeric code or a ISO ALPHA-2 code.
- * @return array
- *   Array including currency code and symbol.
+ *
+ * @return array|bool
+ *   Array including currency code and symbol, or FALSE if country code is not
+ *   found.
  */
 function uc_gc_client_currency($country_code) {
 
-  //$countries = uc_gc_client_countries_define();
   $countries = variable_get('uc_gc_client_countries');
 
-  if(is_numeric($country_code)) {
+  if (is_numeric($country_code)) {
     $country_code = db_select('uc_countries', 'c')
       ->fields('c', array('country_iso_code_2'))
       ->condition('country_id', $country_code)
       ->execute()->fetchField();
   }
-  if(isset($countries[$country_code])) {
+  if (isset($countries[$country_code])) {
     return array(
       'currency' => $countries[$country_code]['currency'],
       'sign' => $countries[$country_code]['sign'],
     );
   }
-  else return;
+  else {
+    return FALSE;
+  }
 }
 
 /**
- * Formats an amount for display with the required currency sign. 
+ * Formats an amount for display with the required currency sign.
  *
- * @param $country_code
+ * @param string $country_code
  *   The country either as an ISO Numeric code or a ISO ALPHA-2 code.
+ *
  * @see uc_curency_format()
  *
- * @return
- *   String containing price formatted with currency symbol and separators.
+ * @return string
+ *   Price formatted with currency symbol and separators.
  */
 function uc_gc_client_currency_format($value, $country_code, $thou = NULL, $dec = NULL) {
 
   $sign = uc_gc_client_currency($country_code)['sign'];
-  return uc_currency_format($value, $sign, $thou = NULL, $dec = NULL); 
+  return uc_currency_format($value, $sign, $thou = NULL, $dec = NULL);
 }
 
 /**
  * Defines an array of countries, currency codes, and GC regions.
  *
- * https://www.iban.com/currency-codes for currency codes.
+ * Https://www.iban.com/currency-codes for currency codes.
  * https://www.nationsonline.org/oneworld/country_code_list.htm for country
  * codes.
  */
@@ -1418,6 +1459,5 @@ function uc_gc_client_countries_define() {
       'enabled' => '0',
     ),
   );
-  return $countries;  
+  return $countries;
 }
-

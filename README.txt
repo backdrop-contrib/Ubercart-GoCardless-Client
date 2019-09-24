@@ -28,7 +28,8 @@ upon checking out.
 The big advantage with GoCardless over other payment services is that it
 charges just 1% on transactions.
 
-There are two kinds of payment service available from GoCardless: Subscriptions and One-off Payments. 
+There are two kinds of payment service available from GoCardless:
+Subscriptions and One-off Payments. 
 
 Subscriptions are automatic recurring payment, and  work well for users
 that want to take the same payment on a regular basis (for instance £5 per 
@@ -114,9 +115,14 @@ ISSUES
 INTERNATIONAL PAYMENTS
 ----------------------
 
-The default region for GoCardless.com is the UK, which uses the Bacs direct debit scheme. To use international payments, you must first contact GoCardless, and request that they enable the required region(s), so that you can use the relevant direct debit schemes. Instructions on how to do this are at: https://support.gocardless.com/hc/en-gb/articles/115002833785-Collecting-from-multiple-regions.
+The default region for GoCardless.com is the UK, which uses the Bacs direct
+debit scheme. To use international payments, you must first contact GoCardless,
+and request that they enable the required region(s), so that you can use the
+relevant direct debit schemes. Instructions on how to do this are at:
+https://support.gocardless.com/hc/en-gb/articles/115002833785-Collecting-from-multiple-regions.
 
-Having done this, international payments are enabled at: admin >> store >> settings >> payment >> method >> gc_client.
+Having done this, international payments are enabled at: 
+admin >> store >> settings >> payment >> method >> gc_client.
 
 After enabling international payments, choose which countries GC can handle, 
 at: admin >> store >> settings >> countries >> gocardless.

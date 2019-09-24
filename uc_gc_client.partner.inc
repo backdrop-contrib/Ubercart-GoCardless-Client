@@ -1,8 +1,22 @@
 <?php
 
-function uc_gc_client_get($data) {
+/**
+ * @file
+ * Functions for communicating with the GoCardless Client site's API.
+ */
 
-  //variable_set('date_format_gocardless', 'Y-m-d');
+/**
+ * Performs a GET HTTP request on the Partner site.
+ *
+ * Used in the payment method's settings form to test if the site is
+ * 'connected' to the Partner.
+ *
+ * @return mixed
+ *   An object if site is connected, and an array containing a single value,
+ *   'FALSE' if the site is not connected.
+ */
+function uc_gc_client_get() {
+  $data = array();
   $options['headers'] = array(
     'Content-Type' => 'application/json',
     'Cookie' => $_SESSION['gc_client_cookie'],
@@ -21,12 +35,6 @@ function uc_gc_client_get($data) {
   return $data;
 }
 
-
-/**
- * @file
- * Functions for communicating with the GoCardless Client site's API.
- */
-
 /**
  * Handles API posts to GC Partner site, and optionally logs results.
  */
@@ -36,24 +44,31 @@ function uc_gc_client_api($params) {
   if ($auth == 200) {
     $result = uc_gc_client_post($params);
     if (isset($result->error)) {
-      $message = t('Error code @code (@error)', array('@code' => $result->code, '@error' => $result->error,));
+      $message = '<pre>' . t('Error code @code (@error)', array(
+        '@code' => $result->code,
+        '@error' => $result->error,
+      )) . '<br />' . print_r($result, TRUE) . '</pre>';
       drupal_set_message($message, 'error');
       if (variable_get('uc_gc_client_debug_api', FALSE)) {
-        watchdog("uc_gc_client", '<pre>' . $message . '<br />' . print_r($result, TRUE) . '</pre>', NULL, WATCHDOG_ERROR);
+        watchdog("uc_gc_client", $message, NULL, WATCHDOG_ERROR);
       }
       return $error = $message;
     }
     else {
       if (variable_get('uc_gc_client_debug_api', FALSE)) {
-        watchdog("uc_gc_client", '<pre>GoCardless API response: <br />' . print_r($result, TRUE) . '</pre>');
+        $message = '<pre>' . t('GoCardless API response:') . '<br />' . print_r($result, TRUE) . '</pre>';
+        watchdog("uc_gc_client", $message);
       }
       return $result;
     }
   }
   else {
-    drupal_set_message(t('Error @code connecting with partner site', array('@code' => $auth)), 'error');
+    drupal_set_message(t('Error @code connecting with partner site', array(
+      '@code' => $auth,
+    )), 'error');
     if (variable_get('uc_gc_client_debug_api', FALSE)) {
-      watchdog("uc_gc_client", '<pre>' . print_r($auth, TRUE) . '</pre>', NULL, WATCHDOG_ERROR);
+      $message = '<pre>' . print_r($auth, TRUE) . '</pre>';
+      watchdog("uc_gc_client", $message, NULL, WATCHDOG_ERROR);
     }
     return $auth;
   }
@@ -64,7 +79,7 @@ function uc_gc_client_api($params) {
  */
 function uc_gc_client_authenticate() {
 
-  //unset($_SESSION['gc_client_cookie_created']);
+  // unset($_SESSION['gc_client_cookie_created']);.
   if (isset($_SESSION['gc_client_cookie_created']) && $_SESSION['gc_client_cookie_created'] < REQUEST_TIME - 1800) {
     unset($_SESSION['gc_client_cookie']);
     unset($_SESSION['gc_client_cookie_created']);
@@ -133,7 +148,9 @@ function uc_gc_client_post($data) {
   $url = variable_get('uc_gc_client_partner_url') . '/gc/client/' . variable_get('uc_gc_client_org_id' . $ext);
   $response = drupal_http_request($url, $options);
 
-  if (isset($response->error)) return $response;
+  if (isset($response->error)) {
+    return $response;
+  }
   else {
     $data = json_decode($response->data);
     return $data;
@@ -148,26 +165,31 @@ function uc_gc_client_post($data) {
  */
 function uc_gc_client_connect() {
 
-  if (isset ($_POST['environ'])) $_POST['environ'] == 'SANDBOX' ? $ext = '_sandbox' : $ext = '_live';
-  
-  if (isset ($_POST['id']) && isset($_POST['environ'])) 
-    variable_set('uc_gc_client_org_id' . $ext, $_POST['id']);
-  
-  if (isset ($_POST['name']) && isset($_POST['environ']))
-    variable_set('uc_gc_client_user_name' . $ext, $_POST['name']);
-    
-  if (isset ($_POST['pass']) && isset($_POST['environ']))
-    variable_set('uc_gc_client_user_pass' . $ext, $_POST['pass']);
+  if (isset($_POST['environ'])) {
+    $_POST['environ'] == 'SANDBOX' ? $ext = '_sandbox' : $ext = '_live';
+  }
 
-  //Unset to reduce likelihood of authentication failure if client id
-  //reconnecting.
+  if (isset($_POST['id']) && isset($_POST['environ'])) {
+    variable_set('uc_gc_client_org_id' . $ext, $_POST['id']);
+  }
+
+  if (isset($_POST['name']) && isset($_POST['environ'])) {
+    variable_set('uc_gc_client_user_name' . $ext, $_POST['name']);
+  }
+
+  if (isset($_POST['pass']) && isset($_POST['environ'])) {
+    variable_set('uc_gc_client_user_pass' . $ext, $_POST['pass']);
+  }
+
+  // Unset to reduce likelihood of authentication failure if client id
+  // reconnecting.
   if (isset($_SESSION['gc_client_cookie_created'])) {
     unset($_SESSION['gc_client_cookie_created']);
   }
 }
 
 /**
- * Implements hook_form_submit.
+ * Implements hook_form_submit().
  *
  * Disconnects client site from GC partner site.
  */
@@ -181,9 +203,12 @@ function uc_gc_client_disconnect_submit($form, $form_state) {
     );
     $result = uc_gc_client_post($data);
 
-    if ($result->response == 200) 
-      drupal_set_message(t('You have disconnected successfully from GoCardless')); 
-    else drupal_set_message(t('There was a problem disconnecting from GoCardless'), 'error'); 
+    if ($result->response == 200) {
+      drupal_set_message(t('You have disconnected successfully from GoCardless'));
+    }
+    else {
+      drupal_set_message(t('There was a problem disconnecting from GoCardless'), 'error');
+    }
 
     if (isset($_SESSION['gc_client_cookie_created'])) {
       unset($_SESSION['gc_client_cookie_created']);

@@ -6,7 +6,8 @@
  */
 
 /**
- * Implementation of hook_rules_event_info().
+ * Implements hook_rules_event_info().
+ *
  * @ingroup rules
  */
 function uc_gc_client_rules_event_info() {
@@ -16,39 +17,20 @@ function uc_gc_client_rules_event_info() {
       'group' => t('Payment'),
       'variables' => array(
         'items' => array(
-          'type' => 'text', 
-          'label' => t('Items')
+          'type' => 'text',
+          'label' => t('Items'),
         ),
         'resource' => array(
           'type' => 'text',
-          'label' => t('GC resource that created the webhook')
+          'label' => t('GC resource that created the webhook'),
         ),
         'order_id' => array(
-          'type' => 'text', 
-          'label' => t('Order ID')
+          'type' => 'text',
+          'label' => t('Order ID'),
         ),
-      ), 
+      ),
     ),
-/*
-    'uc_gcsubs_subs_cancelled' => array(
-      'label' => t('A Subscription cancellation webhook is received from GoCardless'),
-      'group' => t('Payment'),
-      'variables' => array(
-        'items' => array(
-          'type' => 'text', 
-          'label' => t('Items')),
-      ), 
-    ),
-*/
   );
-}
-
-/**
- * Implementation of hook_rules_action_info().
- *
- * @Todo provide action_cancel
- */
-function uc_gc_client_rules_action_info() {
 }
 
 /**

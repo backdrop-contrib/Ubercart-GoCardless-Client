@@ -2,7 +2,7 @@
 
 /**
  * @file
- * Install, update, and uninstall functions for the Ubercart GoCardless Client module.
+ * Install, update, and uninstall functions for the module.
  */
 
 /**
@@ -19,12 +19,12 @@ function uc_gc_client_install() {
   variable_set('uc_gc_client_payment_limit', 3);
   variable_set('date_format_uc_store', 'D d M Y');
   variable_set('date_format_medium', 'D, d/m/Y - H:i');
-  variable_set('date_format_gocardless' ,  'Y-m-d'); 
+  variable_set('date_format_gocardless', 'Y-m-d');
 
   $countries = uc_gc_client_countries_define();
-  variable_set('uc_gc_client_countries', $countries); 
+  variable_set('uc_gc_client_countries', $countries);
 
-  //Provide 'Interval' attribute and set of options
+  // Provide 'Interval' attribute and set of options.
   $count = db_select('uc_attributes', 'a')
     ->fields('a')
     ->condition('name', 'Interval', '=')
@@ -57,7 +57,7 @@ function uc_gc_client_install() {
     }
   }
 
-  //Add order statuses
+  // Add order statuses.
   $t = get_t();
   db_merge('uc_order_statuses')
     ->key(array('order_status_id' => 'mandate_active'))
@@ -94,7 +94,7 @@ function uc_gc_client_install() {
  */
 function uc_gc_client_uninstall() {
 
-  // Remove variables
+  // Remove variables.
   global $conf;
   foreach (array_keys($conf) as $key) {
     if (strpos($key, 'uc_gc_client_') === 0) {
@@ -193,7 +193,7 @@ function uc_gc_client_schema() {
       ),
     ),
     'unique keys' => array(
-      'primary index' => array('gcid', 'ucpid')
+      'primary index' => array('gcid', 'ucpid'),
     ),
   );
   $schema['uc_gc_client_products'] = array(
@@ -374,7 +374,7 @@ function uc_gc_client_update_7002() {
  */
 function uc_gc_client_update_7003() {
   $countries = uc_gc_client_countries_define();
-  variable_set('uc_gc_client_countries', $countries); 
+  variable_set('uc_gc_client_countries', $countries);
 }
 
 /**
@@ -402,7 +402,7 @@ function uc_gc_client_update_7004() {
       'enabled' => '0',
     ),
   );
-  variable_set('uc_gc_client_countries', array_merge($countries, $countries_new)); 
+  variable_set('uc_gc_client_countries', array_merge($countries, $countries_new));
 }
 
 /**
@@ -418,5 +418,5 @@ function uc_gc_client_update_7005() {
       'enabled' => '0',
     ),
   );
-  variable_set('uc_gc_client_countries', array_merge($countries, $countries_new)); 
+  variable_set('uc_gc_client_countries', array_merge($countries, $countries_new));
 }
