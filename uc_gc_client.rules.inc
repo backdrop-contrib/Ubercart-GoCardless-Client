@@ -37,14 +37,11 @@ function uc_gc_client_rules_event_info() {
  * Action implementation: cancels a subscription on GoCardless.com.
  */
 function uc_gc_client_action_cancel($order) {
-
   if (isset($order->order_id)) {
-
     $gc_client = db_select('uc_gc_client', 'c')
       ->fields('c')
       ->condition('ucid', $order->order_id)
       ->execute()->fetch();
-
     $params = array(
       'endpoint' => 'mandates',
       'action' => 'cancel',

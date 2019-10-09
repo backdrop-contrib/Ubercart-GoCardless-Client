@@ -14,10 +14,34 @@ if (module_exists('rules')) {
 }
 
 /**
+ * Implements hook_help().
+ */
+function uc_gc_client_help($path, $arg) {
+  $output = '';
+  if ($path == 'admin/help#uc_gc_client') {
+    $readme = file_get_contents(dirname(__FILE__) . '/README.txt');
+    if (module_exists('markdown')) {
+      $filters = module_invoke('markdown', 'filter_info');
+      $info = $filters['filter_markdown'];
+
+      if (function_exists($info['process callback'])) {
+        $output = $info['process callback']($readme, NULL);
+      }
+      else {
+        $output = '<pre>' . $readme . '</pre>';
+      }
+    }
+    else {
+      $output = '<pre>' . $readme . '</pre>';
+    }
+  }
+  return $output;
+}
+
+/**
  * Implements hook_menu().
  */
 function uc_gc_client_menu() {
-
   $items['cart/gc_client/complete'] = array(
     'title' => 'GoCardless redirect',
     'page callback' => 'uc_gc_client_redirect',
@@ -42,20 +66,22 @@ function uc_gc_client_menu() {
   $items['admin/store/orders/%uc_order/gocardless'] = array(
     'title' => 'GoCardless',
     'page callback' => 'drupal_get_form',
-    'page arguments' => array('uc_gc_client_payments_form', 3),
+    'page arguments' => array('uc_gc_client_payments_form',3),
     'access arguments' => array('edit orders'),
     'type' => MENU_LOCAL_TASK,
     'weight' => 4,
     'file' => 'uc_gc_client.mandates.inc',
   );
-  $items['gc_client/cancel_payment'] = array(
-    'page callback' => 'uc_gc_client_cancel_payment',
+  $items['admin/store/orders/%uc_order/gocardless/cancel_payment/%'] = array(
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('uc_gc_client_cancel_payment',3,6),
     'access arguments' => array('edit orders'),
     'type' => MENU_CALLBACK,
     'file' => 'uc_gc_client.mandates.inc',
   );
-  $items['gc_client/scheduled_action'] = array(
-    'page callback' => 'uc_gc_client_scheduled_action',
+  $items['admin/store/orders/%uc_order/gocardless/scheduled_action/%/%/%'] = array(
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('uc_gc_client_scheduled_action',3,6,7,8),
     'access arguments' => array('edit orders'),
     'type' => MENU_CALLBACK,
     'file' => 'uc_gc_client.mandates.inc',
@@ -95,7 +121,6 @@ function uc_gc_client_menu() {
  * not GoCardless.
  */
 function uc_gc_client_menu_local_tasks_alter(&$data, $router_item, $root_path) {
-
   if (strpos($root_path, 'admin/store/orders/%') !== FALSE) {
     if (variable_get('uc_gc_client_payments_tab', 0)) {
       $payment_method = db_select('uc_orders', 'o')
@@ -140,7 +165,7 @@ function uc_gc_client_date_formats() {
  * Implements hook_uc_payment_method().
  */
 function uc_gc_client_uc_payment_method() {
-
+  module_load_include('inc', 'uc_gc_client', 'uc_gc_client.admin');
   $methods[] = array(
     'id' => 'gc_client',
     'name' => t('GoCardless'),
@@ -150,6 +175,7 @@ function uc_gc_client_uc_payment_method() {
     'weight' => 1,
     'checkout' => FALSE,
     'no_gateway' => TRUE,
+    'file' => '/uc_gc_client.admin.inc',
   );
   return $methods;
 }
@@ -158,7 +184,6 @@ function uc_gc_client_uc_payment_method() {
  * Implements hook_element_info().
  */
 function uc_gc_client_element_info() {
-
   $types = array();
   $types['uc_gc_client_address'] = array(
     '#input' => TRUE,
@@ -176,7 +201,6 @@ function uc_gc_client_element_info() {
  * Element process hook for address fields.
  */
 function uc_gc_client_process_address_field($element, $form_state) {
-
   $uc_countries = db_select('uc_countries', 'u')
     ->fields('u')
     ->condition('version', 0, '>')
@@ -199,32 +223,25 @@ function uc_gc_client_process_address_field($element, $form_state) {
  * Implements hook_form_FORM_ID_alter().
  */
 function uc_gc_client_form_uc_cart_checkout_form_alter(&$form, &$form_state, $form_id) {
-
   if (($order_id = intval($_SESSION['cart_order'])) > 0) {
-
     $order = uc_order_load($order_id);
-
     if ((isset($form['panes']['payment']) && count($form['panes']['payment']['payment_method']['#options']) <= 1) || !isset($form['panes']['payment'])) {
       $order->payment_method = 'gc_client';
       uc_order_save($order);
     }
 
     if ($order->payment_method == 'gc_client') {
-
       // Change the address fieldsets to a bespoke type that has countries
       // filtered to only include GC enabled countries.
-      // if (variable_get('uc_gc_client_currencies')) {.
       if (isset($form['panes']['delivery'])) {
         $form['panes']['delivery']['address']['#type'] = 'uc_gc_client_address';
       }
       if (isset($form['panes']['billing'])) {
         $form['panes']['billing']['address']['#type'] = 'uc_gc_client_address';
       }
-      // }
       // Optional checkout review selected. (This should only be selected
       // if GC is the only enabled payment method.)
       if (variable_get('uc_gc_client_optional_checkout_review', FALSE)) {
-
         $form['actions']['continue']['#value'] = variable_get('uc_gc_client_checkout_label');
         $form['#submit'][] = 'uc_gc_client_checkout_form_submit';
       }
@@ -236,19 +253,15 @@ function uc_gc_client_form_uc_cart_checkout_form_alter(&$form, &$form_state, $fo
  * Implements hook_form_FORM_ID_alter().
  */
 function uc_gc_client_form_uc_cart_checkout_review_form_alter(&$form, &$form_state, $form_id) {
-
   // Optional checkout not selected.
   if (($order_id = intval($_SESSION['cart_order'])) > 0) {
-
     $order = uc_order_load($order_id);
-
     // This allows you to omit the Payment method pane, and is safe because
     // you would only do if you had just one payment method enabled.
     if (!isset($order->payment_method) || empty($order->payment_method)) {
       $order->payment_method = 'gc_client';
       uc_order_save($order);
     }
-
     if ($order->payment_method == 'gc_client') {
       $form['actions']['submit']['#access'] = FALSE;
       $form['#prefix'] = '<table style="display: inline; padding-top: 1em;"><tr><td>';
@@ -271,12 +284,7 @@ function uc_gc_client_checkout_form_submit($form, $form_state) {
  *
  * Returns the elements for the checkout review form.
  */
-
-/**
- * Function uc_gc_client_checkout_review_form($form_state, $order = FALSE) {.
- */
 function uc_gc_client_checkout_review_form($form_state, $order) {
-
   $order_id = $order['build_info']['args']['0']->order_id;
   $mandate_details = uc_gc_client_mandate_details($order);
   $form['mandate_details'] = array(
@@ -287,7 +295,6 @@ function uc_gc_client_checkout_review_form($form_state, $order) {
     '#type' => 'value',
     '#value' => $order_id,
   );
-
   // Provide a submit button for the Checkout review form.
   $form['gocardless_link'] = array(
     '#type' => 'submit',
@@ -304,7 +311,6 @@ function uc_gc_client_checkout_review_form($form_state, $order) {
  * begin the Direct Debit setup flow.
  */
 function uc_gc_client_form_submit($form, $form_state) {
-
   if (isset($form_state['values']['mandate_details'])) {
     $mandate_details = $form_state['values']['mandate_details'];
     $order_id = $form_state['values']['order_id'];
@@ -314,7 +320,6 @@ function uc_gc_client_form_submit($form, $form_state) {
     $order_id = $order->order_id;
     $mandate_details = uc_gc_client_mandate_details($order);
   }
-
   $auth = uc_gc_client_authenticate();
   if ($auth == 200) {
     $data = array(
@@ -337,14 +342,11 @@ function uc_gc_client_form_submit($form, $form_state) {
  * Mandate details are passed on to GoCardless Redirect Flows endpoint.
  */
 function uc_gc_client_mandate_details($order) {
-
   global $base_url;
-
   // Depending on if Optional Checkout Review is selected.
   if (is_array($order)) {
     $order = $order['build_info']['args']['0'];
   }
-
   $fields = array(
     'first_name',
     'last_name',
@@ -405,7 +407,6 @@ function uc_gc_client_mandate_details($order) {
  * For subscriptions it will provide the start_date.
  */
 function uc_gc_client_start_date() {
-
   $doms = variable_get('uc_gc_client_dom');
   if (empty($doms)) {
     return;
@@ -431,7 +432,6 @@ function uc_gc_client_start_date() {
  *  For anonymous checkouts update the uid from 0 in the uc_gcsubs table.
  */
 function uc_gc_client_uc_checkout_complete($order, $account) {
-
   if (isset($order->data['new_user'])) {
     $update = db_update('uc_gc_client')
       ->fields(array(
@@ -448,7 +448,6 @@ function uc_gc_client_uc_checkout_complete($order, $account) {
  *  Adds extra information to a cart item's "data" array.
  */
 function uc_gc_client_uc_add_to_cart_data($form_values) {
-
   $nid = $form_values['nid'];
   $extras = db_select('uc_gc_client_products', 'p')
     ->fields('p')
@@ -506,9 +505,7 @@ function uc_gc_client_uc_add_to_cart_data($form_values) {
  *   Length and unit interval parameters.
  */
 function uc_gc_client_interval_params($option) {
-
   switch ($option) {
-
     case 'Yearly':
       $interval_params = array(
         'length' => 1,
@@ -559,7 +556,6 @@ function uc_gc_client_interval_params($option) {
  * Implements hook_uc_order_pane().
  */
 function uc_gc_client_uc_order_pane() {
-
   $panes['cancel_button'] = array(
     'callback' => 'uc_gc_client_pane_cancel_button',
     'title' => t('Cancel mandate button'),
@@ -584,11 +580,8 @@ function uc_gc_client_uc_order_pane() {
  * Provides the "GoCardless" pane in an order's admin view pane.
  */
 function uc_gc_client_uc_order_pane_callback($op, $order) {
-
   switch ($op) {
-
     case 'view':
-
       // Todo this doesn't work if there is more than one product in order.
       $query = db_select('uc_gc_client', 'g');
       $gc = $query
@@ -619,7 +612,6 @@ function uc_gc_client_uc_order_pane_callback($op, $order) {
         !is_null($gc->next_payment) ? $next_payment = format_date($gc->next_payment) . '<br />' : $next_payment = 'Not set<br />';
         $build .= 'Next payment creation: ' . $next_payment;
       }
-
       return array('#markup' => $build);
   }
 }
@@ -628,7 +620,6 @@ function uc_gc_client_uc_order_pane_callback($op, $order) {
  * Handles the "Cancel button" order pane.
  */
 function uc_gc_client_pane_cancel_button($op, $order, &$form = NULL, &$form_state = NULL) {
-
   switch ($op) {
     case 'customer':
       if (user_access('view own invoices')) {
@@ -664,7 +655,6 @@ function uc_gc_client_pane_cancel_form($form, &$form_state, $order) {
  * Submit function for the cancel button form.
  */
 function uc_gc_client_pane_cancel_form_submit($form, &$form_state) {
-
   $order = $form['order']['#value'];
   uc_order_update_status($order->order_id, 'canceled');
 }
@@ -676,7 +666,6 @@ function uc_gc_client_pane_cancel_form_submit($form, &$form_state) {
  * update next_payment.
  */
 function uc_gc_client_cron() {
-
   // Postpone the operation if there is already an instance of
   // uc_gc_client_cron running, to mitigate against the possibility of extra
   // payments being created in error. This can happen if cron takes more than
@@ -888,7 +877,6 @@ function uc_gc_client_cron() {
  * Returns the price of an order modified by the multiplier and other factors.
  */
 function uc_gc_client_price_calculate($order, $ucpid, $next_paymentdate, $status, $data = FALSE) {
-
   // Process scheduled adjustments.
   $query = db_select('uc_gc_client_schedules', 's');
   $query->join('uc_gc_client_schedules_adjs', 'a', 'a.sid = s.sid');
@@ -991,25 +979,9 @@ function uc_gc_client_price_calculate($order, $ucpid, $next_paymentdate, $status
 }
 
 /**
- * Implements hook_uc_order_product_delete().
- */
-/*
-function uc_gc_client_uc_order_product_delete($order_product) {
-
-$ucid = $order_product->order_id;
-
-// Delete record from gc_client table if there is one for the order.
-$db_delete = db_delete('uc_gc_client')
-->condition('ucid', $ucid, '=')
-->execute();
-}
- */
-
-/**
  * Implements hook_mail().
  */
 function uc_gc_client_mail($key, &$message, $params) {
-
   global $base_url;
   $order_url = $base_url . '/admin/store/orders/' . $params['order_id'];
   $link = t('order <a href="@url">#@order_id</a>', array('@order_id' => $params['order_id'], '@url' => $order_url));
@@ -1023,12 +995,10 @@ function uc_gc_client_mail($key, &$message, $params) {
   );
 
   switch ($key) {
-
     case 'payment-less-than-one':
       $message['subject'] = t("A payment's Amount was less than @sign1 !", $message_arr);
       $message['body'][] = t("<p>A payment for order <a href='@order_url'>#@order_id</a> has failed because it's amount was less than @sign1.</p>", $message_arr);
       break;
-
     case 'payment-limit-reached':
       $message['subject'] = "The daily payment limit has been exceeded for an order!";
       $message['body'][] = t("<p>A payment of @amount for order <a href='@order_url'>#@order_id</a> could not be raised because the daily automatic limit of @payment_limit has been exceeded.</p>", $message_arr);
@@ -1055,15 +1025,12 @@ function uc_gc_client_mail_alter(&$message) {
  * Implements hook_uc_order().
  */
 function uc_gc_client_uc_order($op, $order, $arg2) {
-
   switch ($op) {
-
     case 'update':
       if ($arg2 == 'canceled') {
         uc_gc_client_uc_order_cancel($order);
       }
       break;
-
     case 'delete':
       uc_gc_client_uc_order_delete($order);
       break;
@@ -1074,7 +1041,6 @@ function uc_gc_client_uc_order($op, $order, $arg2) {
  * Removes records from the database upon deletion of an order.
  */
 function uc_gc_client_uc_order_delete($order) {
-
   // Cancel GoCardless mandate first if order status is not canceled.
   if ($order->order_status != 'canceled') {
     uc_gc_client_uc_order_cancel($order);
@@ -1097,7 +1063,6 @@ function uc_gc_client_uc_order_delete($order) {
  * Cancels a GC mandate upon cancelling an order.
  */
 function uc_gc_client_uc_order_cancel($order) {
-
   $gc_client = db_select('uc_gc_client', 'c')
     ->fields('c')
     ->condition('ucid', $order->order_id)
@@ -1138,7 +1103,6 @@ function uc_gc_client_uc_order_cancel($order) {
  * Get the Ubercart order ID from database using mandate ID from GoCardless.
  */
 function uc_gc_client_id($gcid) {
-
   $order_id = db_query("SELECT ucid FROM {uc_gc_client} where gcid = :gc_order_id", array(':gc_order_id' => $gcid))->fetchField();
   return $order_id;
 }
@@ -1151,7 +1115,6 @@ function uc_gc_client_id($gcid) {
  * specified range of days
  */
 function uc_gc_client_working_days_calculate($op, $days, $date) {
-
   $x = 1;
   $string = $op . '1 day';
   while ($x <= $days) {
@@ -1195,9 +1158,7 @@ function gc_client_element_validate_integer_positive_zero($element, &$form_state
  *   found.
  */
 function uc_gc_client_currency($country_code) {
-
   $countries = variable_get('uc_gc_client_countries');
-
   if (is_numeric($country_code)) {
     $country_code = db_select('uc_countries', 'c')
       ->fields('c', array('country_iso_code_2'))
@@ -1227,7 +1188,6 @@ function uc_gc_client_currency($country_code) {
  *   Price formatted with currency symbol and separators.
  */
 function uc_gc_client_currency_format($value, $country_code, $thou = NULL, $dec = NULL) {
-
   $sign = uc_gc_client_currency($country_code)['sign'];
   return uc_currency_format($value, $sign, $thou = NULL, $dec = NULL);
 }
@@ -1240,7 +1200,6 @@ function uc_gc_client_currency_format($value, $country_code, $thou = NULL, $dec 
  * codes.
  */
 function uc_gc_client_countries_define() {
-
   $countries = array(
     'GB' => array(
       'region' => 'bacs',

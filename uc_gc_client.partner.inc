@@ -39,7 +39,6 @@ function uc_gc_client_get() {
  * Handles API posts to GC Partner site, and optionally logs results.
  */
 function uc_gc_client_api($params) {
-
   $auth = uc_gc_client_authenticate();
   if ($auth == 200) {
     $result = uc_gc_client_post($params);
@@ -78,7 +77,6 @@ function uc_gc_client_api($params) {
  * Handles Sevices module session authentication with GC Partner site.
  */
 function uc_gc_client_authenticate() {
-
   // unset($_SESSION['gc_client_cookie_created']);.
   if (isset($_SESSION['gc_client_cookie_created']) && $_SESSION['gc_client_cookie_created'] < REQUEST_TIME - 1800) {
     unset($_SESSION['gc_client_cookie']);
@@ -86,9 +84,7 @@ function uc_gc_client_authenticate() {
   }
 
   if (!isset($_SESSION['gc_client_cookie_created'])) {
-
     $sandbox = variable_get('uc_gc_client_sandbox') ? $ext = '_sandbox' : $ext = '_live';
-
     // Login first.
     $data = array(
       'username' => variable_get('uc_gc_client_user_name' . $ext),
@@ -105,8 +101,8 @@ function uc_gc_client_authenticate() {
     );
     $result = drupal_http_request($url, $options);
     $result_data = json_decode($result->data);
-    if ($result->code == 200) {
 
+    if ($result->code == 200) {
       // Get X-CRSF token, and save cookie and token.
       $_SESSION['gc_client_cookie'] = $result_data->session_name . '=' . $result_data->sessid;
       $_SESSION['gc_client_cookie_created'] = REQUEST_TIME;
@@ -133,7 +129,6 @@ function uc_gc_client_authenticate() {
  * Handles HTTP requests to GC Partner site.
  */
 function uc_gc_client_post($data) {
-
   variable_set('date_format_gocardless', 'Y-m-d');
   $options['headers'] = array(
     'Content-Type' => 'application/json',
@@ -147,7 +142,6 @@ function uc_gc_client_post($data) {
   $options['method'] = 'POST';
   $url = variable_get('uc_gc_client_partner_url') . '/gc/client/' . variable_get('uc_gc_client_org_id' . $ext);
   $response = drupal_http_request($url, $options);
-
   if (isset($response->error)) {
     return $response;
   }
@@ -164,19 +158,15 @@ function uc_gc_client_post($data) {
  * GoCardless OAuth flow.
  */
 function uc_gc_client_connect() {
-
   if (isset($_POST['environ'])) {
     $_POST['environ'] == 'SANDBOX' ? $ext = '_sandbox' : $ext = '_live';
   }
-
   if (isset($_POST['id']) && isset($_POST['environ'])) {
     variable_set('uc_gc_client_org_id' . $ext, $_POST['id']);
   }
-
   if (isset($_POST['name']) && isset($_POST['environ'])) {
     variable_set('uc_gc_client_user_name' . $ext, $_POST['name']);
   }
-
   if (isset($_POST['pass']) && isset($_POST['environ'])) {
     variable_set('uc_gc_client_user_pass' . $ext, $_POST['pass']);
   }
@@ -194,7 +184,6 @@ function uc_gc_client_connect() {
  * Disconnects client site from GC partner site.
  */
 function uc_gc_client_disconnect_submit($form, $form_state) {
-
   $auth = uc_gc_client_authenticate();
   if ($auth == 200) {
     $data = array(
@@ -202,18 +191,15 @@ function uc_gc_client_disconnect_submit($form, $form_state) {
       'action' => 'revoke',
     );
     $result = uc_gc_client_post($data);
-
     if ($result->response == 200) {
       drupal_set_message(t('You have disconnected successfully from GoCardless'));
     }
     else {
       drupal_set_message(t('There was a problem disconnecting from GoCardless'), 'error');
     }
-
     if (isset($_SESSION['gc_client_cookie_created'])) {
       unset($_SESSION['gc_client_cookie_created']);
     }
-
     $ext = $form_state['values']['ext'];
     variable_del('uc_gc_client_org_id' . $ext);
     variable_del('uc_gc_client_user_name' . $ext);

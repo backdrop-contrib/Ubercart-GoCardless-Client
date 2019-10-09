@@ -2,7 +2,7 @@
 
 /**
  * @file
- * Hooks provided by the uc_gcsubs module.
+ * Hooks provided by the uc_gc_client module.
  */
 
 /**

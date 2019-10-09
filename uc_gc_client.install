@@ -9,7 +9,6 @@
  * Implements hook_install().
  */
 function uc_gc_client_install() {
-
   variable_set('uc_gc_client_partner_url', 'https://seamless-cms.co.uk');
   variable_set('uc_gc_client_checkout_label', 'Create Direct Debit with GoCardless');
   variable_set('uc_gc_client_default_type', 'P');
@@ -20,7 +19,6 @@ function uc_gc_client_install() {
   variable_set('date_format_uc_store', 'D d M Y');
   variable_set('date_format_medium', 'D, d/m/Y - H:i');
   variable_set('date_format_gocardless', 'Y-m-d');
-
   $countries = uc_gc_client_countries_define();
   variable_set('uc_gc_client_countries', $countries);
 
@@ -93,8 +91,7 @@ function uc_gc_client_install() {
  * Implements hook_uninstall().
  */
 function uc_gc_client_uninstall() {
-
-  // Remove variables.
+  //Remove variables.
   global $conf;
   foreach (array_keys($conf) as $key) {
     if (strpos($key, 'uc_gc_client_') === 0) {
@@ -107,7 +104,6 @@ function uc_gc_client_uninstall() {
  * Implements hook_schema().
  */
 function uc_gc_client_schema() {
-
   $schema['uc_gc_client'] = array(
     'description' => 'Stores data on GoCardless orders',
     'fields' => array(
@@ -341,7 +337,6 @@ function uc_gc_client_schema() {
  * Add a mandate_active order status.
  */
 function uc_gc_client_update_7001() {
-
   db_insert('uc_order_statuses')
     ->fields(array(
       'order_status_id' => 'mandate_active',
@@ -357,7 +352,6 @@ function uc_gc_client_update_7001() {
  * Add a mandate_failed order status.
  */
 function uc_gc_client_update_7002() {
-
   db_insert('uc_order_statuses')
     ->fields(array(
       'order_status_id' => 'mandate_failed',

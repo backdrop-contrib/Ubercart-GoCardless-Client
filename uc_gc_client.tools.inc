@@ -9,7 +9,6 @@
  * Implements hook_form().
  */
 function uc_gc_client_priceshift_form($form, $form_state) {
-
   $sandbox = variable_get('uc_gc_client_sandbox');
   $subs = db_select('uc_gc_client', 'g')
     ->fields('g')
@@ -33,11 +32,9 @@ function uc_gc_client_priceshift_form($form, $form_state) {
   $product_select = array();
 
   foreach ($subs as $sub) {
-
     $order = uc_order_load($sub->ucid);
     $product = $order->products[$sub->ucpid];
     $order_path = 'admin/store/orders/' . $sub->ucid;
-
     $uc_product = db_select('uc_products', 'p')
       ->fields('p', array('cost', 'sell_price'))
       ->condition('nid', $product->nid, '=')
@@ -55,7 +52,6 @@ function uc_gc_client_priceshift_form($form, $form_state) {
         if ($option_array['cost'] > 0 || $option_array['price'] > 0) {
           $attr_cost = uc_currency_format($option_array['cost']);
           $attr_price = uc_currency_format($option_array['price']);
-
           $line = t('@attr_key->@option_value: @attr_cost | @attr_price<br>', array(
             '@attr_key' => $attr_key,
             '@option_value' => $option_value,

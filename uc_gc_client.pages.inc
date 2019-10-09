@@ -9,17 +9,14 @@
  * Menu callback; complete an order on redirection back from GoCardless.com.
  */
 function uc_gc_client_redirect($redirect, $mandate, $customer, $order_id, $payment_method, $start_date = NULL, $cart_id = 0) {
-
   if (intval($_SESSION['cart_order']) != $order_id) {
     drupal_set_message(t('Thank you for your order! GoCardless will notify us once your payment has been processed.'));
     drupal_goto('cart');
   }
-
   // Ensure the payment method is GoCardless.
   if ($payment_method != 'gc_client') {
     drupal_goto('cart');
   }
-
   $order = uc_order_load($order_id);
   $uid = $order->uid;
 
@@ -32,7 +29,6 @@ function uc_gc_client_redirect($redirect, $mandate, $customer, $order_id, $payme
 
   // Set up seperate payments / subscriptions for each product in cart.
   foreach ($order->products as $product) {
-
     $ucpid = $product->order_product_id;
     $product->data['gc_auth_type'] == 'subscription' ? $gc_type = 'S' : $gc_type = 'P';
 
@@ -96,11 +92,9 @@ function uc_gc_client_redirect($redirect, $mandate, $customer, $order_id, $payme
 
     // If it is a subscription.
     if ($gc_type == 'S') {
-
       $calculate = uc_gc_client_price_calculate($order, $product->order_product_id, $next_paymentdate = NULL, $status = NULL);
       $currency_code = isset($calculate['currency']) ? $calculate['currency'] : variable_get('uc_currency_code');
       $currency_sign = isset($calculate['sign']) ? $calculate['sign'] : variable_get('uc_currency_sign');
-
       $payment_details = array(
         'amount' => $calculate['amount'],
         'currency' => $currency_code,
@@ -129,11 +123,9 @@ function uc_gc_client_redirect($redirect, $mandate, $customer, $order_id, $payme
       if (!$product_uc->raise_payment) {
         $params['start_date'] = format_date($start_date, 'gocardless');
       }
-
       $result = uc_gc_client_api($params);
 
       if ($result->response->status_code == 201) {
-
         $sub = $result->response->body->subscriptions;
         $comment_arr = array(
           '@product' => $product->title,
@@ -142,7 +134,6 @@ function uc_gc_client_redirect($redirect, $mandate, $customer, $order_id, $payme
           '@amount' => uc_currency_format($sub->amount / 100, $currency_sign),
           '@start_date' => format_date(strtotime($sub->start_date), 'uc_store'),
         );
-
         $comment = t('Your @interval @interval_unit subscription plan of @amount for @product has been created with GoCardless, and the first payment will be made from your bank on @start_date.', $comment_arr);
         uc_order_comment_save($order_id, $uid, $comment, 'order', 'Pending', TRUE);
         drupal_set_message($comment);
@@ -154,17 +145,14 @@ function uc_gc_client_redirect($redirect, $mandate, $customer, $order_id, $payme
 
     // If it is not a subscription.
     elseif ($gc_type != 'S') {
-
       // If raise_payment is set for the product then raise the first payment
       // immediately.
       if ($product_uc->raise_payment) {
-
         $calculate = uc_gc_client_price_calculate($order, $product->order_product_id, $next_paymentdate = NULL, $status = NULL);
         $currency_code = isset($calculate['currency']) ? $calculate['currency'] : variable_get('uc_currency_code');
         $currency_sign = isset($calculate['sign']) ? $calculate['sign'] : variable_get('uc_currency_sign');
         $order->data['initial_payment'] = uc_currency_format($calculate['amount'], $currency_sign);
         uc_order_save($order);
-
         $payment_details = array(
           'amount' => $calculate['amount'],
           'currency' => $currency_code,
@@ -192,9 +180,7 @@ function uc_gc_client_redirect($redirect, $mandate, $customer, $order_id, $payme
         if ($result->response->status_code == 201) {
           // Update next_payment field in gc_client table.
           $payment = $result->response->body->payments;
-
           isset($interval) ? $next_payment = strtotime('+' . $interval['string']) : $next_payment = NULL;
-
           $update = db_update('uc_gc_client')
             ->fields(array(
               'next_payment' => $next_payment,
@@ -235,7 +221,6 @@ function uc_gc_client_redirect($redirect, $mandate, $customer, $order_id, $payme
       // Else if a start date is set for the product then defer the first
       // payment creation.
       elseif (!is_null($start_date)) {
-
         // Update next_payment field in uc_gcsubs table.
         $update = db_update('uc_gc_client')
           ->fields(array(
@@ -318,7 +303,6 @@ function uc_gc_client_hash_equals($known_string, $user_string) {
  * Menu callback; respond to a webhook from GoCardless.com.
  */
 function uc_gc_client_webhook() {
-
   variable_get('uc_gc_client_sandbox') ? $secret = variable_get('uc_gc_client_webhook_sandbox') : $secret = variable_get('uc_gc_client_webhook_live');
   $webhook = file_get_contents('php://input');
   $headers = function_exists('getallheaders') ? getallheaders() : uc_gc_client_getallheaders();
@@ -327,9 +311,7 @@ function uc_gc_client_webhook() {
 
   $hash_equals_function = function_exists('hash_equals') ? 'hash_equals' : 'uc_gc_client_hash_equals';
   if ($hash_equals_function($provided_signature, $calculated_signature)) {
-
     $data = json_decode($webhook, TRUE);
-
     // Optionally write webhook to log.
     if (variable_get('uc_gc_client_debug_webhook', FALSE)) {
       $message = '<pre>' . t('GoCardless webhook:') . '<br />' . print_r($data, TRUE) . '</pre>';
@@ -342,7 +324,6 @@ function uc_gc_client_webhook() {
 
     // Process the events.
     foreach ($data['events'] as $event) {
-
       switch ($event['resource_type']) {
 
         case 'mandates':
@@ -376,7 +357,6 @@ function uc_gc_client_webhook() {
         default:
           $order_id = FALSE;
           break;
-
       }
 
       // Invoke Rules event.
@@ -394,7 +374,6 @@ function uc_gc_client_webhook() {
  * Processes 'mandates' webhooks.
  */
 function uc_gc_client_webhook_mandates($order, $action, $event) {
-
   switch ($action) {
 
     case 'submitted':
@@ -414,9 +393,7 @@ function uc_gc_client_webhook_mandates($order, $action, $event) {
       break;
 
     case 'failed':
-
       if ($order->order_status <> 'mandate_failed') {
-
         $comment = t('Your direct debit mandate @mandate creation has failed.', array('@mandate' => $event['links']['mandate']));
         uc_order_comment_save($order->order_id, $order->uid, $comment, 'order', 'processing', TRUE);
 
@@ -425,7 +402,6 @@ function uc_gc_client_webhook_mandates($order, $action, $event) {
       break;
 
     case 'active':
-
       if ($order->order_status <> 'mandate_active') {
         $comment = t('Your direct debit mandate @mandate has been set up successfully with your bank.', array('@mandate' => $event['links']['mandate']));
         uc_order_comment_save($order->order_id, $order->uid, $comment, 'order', 'Completed', TRUE);
@@ -441,9 +417,7 @@ function uc_gc_client_webhook_mandates($order, $action, $event) {
       break;
 
     case 'cancelled':
-
       if ($order->order_status <> 'canceled') {
-
         $comment = t('Your direct debit mandate @mandate has been cancelled with your bank by GoCardless.', array('@mandate' => $event['links']['mandate']));
         uc_order_comment_save($order->order_id, $order->uid, $comment, 'order', 'canceled', TRUE);
 
@@ -481,7 +455,6 @@ function uc_gc_client_webhook_mandates($order, $action, $event) {
  * Processes 'payments' webhooks.
  */
 function uc_gc_client_webhook_payments($order, $action, $event, $resource) {
-
   $mandate = $resource->links->mandate;
   $order_id = $order->order_id;
   $amount = $resource->amount / 100;
@@ -494,7 +467,6 @@ function uc_gc_client_webhook_payments($order, $action, $event, $resource) {
   $currency_sign = uc_gc_client_currency($country_code)['sign'];
 
   switch ($action) {
-
     case 'confirmed':
       uc_payment_enter($order_id, 'gc_client', $amount, 0, NULL, t('Direct debit has been taken by GoCardless'));
       $comment = t('Your payment of @amount has been confirmed by GoCardless and will be paid from your bank account.', array('@amount' => uc_currency_format($amount, $currency_sign)));

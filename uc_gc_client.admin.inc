@@ -21,10 +21,8 @@ function uc_gc_client_sandbox_callback(&$form, &$form_state) {
  * Payment method callback.
  */
 function uc_gc_client_uc_payment_method_callback($op, &$order, $form = NULL, &$form_state = NULL) {
-
   switch ($op) {
     case 'settings':
-
       if (isset($form_state['values']['uc_gc_client_sandbox'])) {
         $sandbox = $form_state['values']['uc_gc_client_sandbox'];
       }
@@ -257,10 +255,8 @@ function uc_gc_client_uc_payment_method_callback($op, &$order, $form = NULL, &$f
  * Validates the gc_client payment method settings form.
  */
 function uc_gc_client_admin_validate(&$form, &$form_state) {
-
   // Validate and process Days of Month.
   if (isset($form['uc_gc_client_dom']['#value'])) {
-
     // Only allow positive integers, spaces and commas.
     $doms = $form['gc_client_dom']['#value'];
     $regex = "/^[0-9, ]+$/";
@@ -298,11 +294,9 @@ function uc_gc_client_admin_validate(&$form, &$form_state) {
  * Redirect to Partner site to activate the GoCardless OAuth Flow.
  */
 function uc_gc_client_connect_submit($form, $form_state) {
-
   $form_state['values']['uc_gc_client_sandbox'] == 1 ? $env = 'sandbox' : $env = 'live';
   global $base_url;
   $client_url = urlencode($base_url . '/admin/store/settings/payment/method/gc_client');
-
   $url = variable_get('uc_gc_client_partner_url') . '/gc_partner/connect/' . $env;
   drupal_goto($url, array(
     'query' => array(
@@ -333,7 +327,6 @@ function uc_gc_client_drupal_goto_alter(&$path, &$options, &$http_response_code)
  * Add extra GoCardless settings to Product node Edit form.
  */
 function uc_gc_client_form_node_form_alter(&$form, $form_state, $form_id) {
-
   if (uc_product_is_product_form($form)) {
     $nid = $form['nid']['#value'];
     $defaults = db_select('uc_gc_client_products', 'p')
@@ -358,7 +351,6 @@ function uc_gc_client_form_node_form_alter(&$form, $form_state, $form_id) {
     );
     $options = array('S' => t('Subscription'), 'P' => t('One-off payments'));
     $form['gc']['gc_type'] = array(
-      // '#type' => 'radios',.
       '#type' => 'select',
       '#title' => t('Type'),
       '#default_value' => isset($defaults['type']) ? $defaults['type'] : NULL,
@@ -409,7 +401,6 @@ function uc_gc_client_form_node_form_alter(&$form, $form_state, $form_id) {
       '#title' => t("Automatically raise a payment upon completion of checkout"),
       '#description' => t("Checking this will override any other settings for raising the initial payment.<br />Leave unchecked if you want another module to handle raising the initial payment.<br /><br />"),
     );
-
     $form['gc']['start_date'] = array(
       '#title' => t('Start date'),
       '#type' => module_exists('date_popup') ? 'date_popup' : 'date_select',
@@ -436,9 +427,7 @@ function uc_gc_client_form_node_form_alter(&$form, $form_state, $form_id) {
  * Add extra GoCardless settings to {uc_gc_client_products} table.
  */
 function uc_gc_client_node_insert($node) {
-
   if (uc_product_is_product($node)) {
-
     $insert = db_insert('uc_gc_client_products')
       ->fields(array(
         'nid' => $node->nid,
@@ -456,19 +445,15 @@ function uc_gc_client_node_insert($node) {
  * Implements hook_node_form_validate().
  */
 function uc_gc_client_node_form_validate($form, &$form_state) {
-
   if (!empty($form_state['values']['interval_length']) && empty($form_state['values']['interval_unit'])) {
     form_set_error('interval_unit', t('Interval unit must be set if interval length is set.'));
   }
-
   if (!empty($form_state['values']['interval_unit']) && empty($form_state['values']['interval_length'])) {
     form_set_error('interval_length', t('Interval length must be set if interval unit is set.'));
   }
-
   if ($form_state['values']['gc_type'] == 'S' && empty($form_state['values']['interval_unit'])) {
     form_set_error('interval_unit', t('Interval unit must be set if type is Subscription.'));
   }
-
   if ($form_state['values']['gc_type'] == 'S' && empty($form_state['values']['interval_length'])) {
     form_set_error('interval_length', t('Interval length must be set if type is Subscription.'));
   }
@@ -480,10 +465,8 @@ function uc_gc_client_node_form_validate($form, &$form_state) {
  *  Updates gc_client_products table.
  */
 function uc_gc_client_node_form_submit($form, &$form_state) {
-
   if (uc_product_is_product_form($form) && isset($form_state['values']['nid'])) {
     $nid = $form_state['values']['nid'];
-
     db_merge('uc_gc_client_products')
       ->key(array('nid' => $nid))
       ->fields(array(
@@ -505,7 +488,6 @@ function uc_gc_client_node_form_submit($form, &$form_state) {
  * Delete row from {gc_client_products} table.
  */
 function uc_gc_client_node_delete($node) {
-
   if (uc_product_is_product($node)) {
     $delete = db_delete('uc_gc_client_products')
       ->condition('nid', $node->nid, '=')
@@ -519,7 +501,6 @@ function uc_gc_client_node_delete($node) {
  * Adds the "Product information".
  */
 function uc_gc_client_field_extra_fields() {
-
   $extra = array();
   foreach (uc_product_types() as $type) {
     $extra['node'][$type] = array(
@@ -544,7 +525,6 @@ function uc_gc_client_field_extra_fields() {
  * Implements hook_node_view().
  */
 function uc_gc_client_node_view($node, $view_mode, $langcode) {
-
   if (uc_product_is_product($node)) {
     $nid = $node->nid;
     $extras = db_select('uc_gc_client_products', 'p')
@@ -569,7 +549,6 @@ function uc_gc_client_node_view($node, $view_mode, $langcode) {
  * Provides an interface to enable / disable GC countries.
  */
 function uc_gc_client_countries_form($form, &$form_state) {
-
   $uc_countries = db_select('uc_countries', 'u')
     ->fields('u')
     ->condition('version', 0, '>')
@@ -578,7 +557,6 @@ function uc_gc_client_countries_form($form, &$form_state) {
   $gc_countries = variable_get('uc_gc_client_countries');
   $countries = array();
   $default_value = array();
-
   foreach ($gc_countries as $gc_code => $gc_country) {
     if (isset($uc_countries[$gc_code])) {
       $country_name = $uc_countries[$gc_code]->country_name;
@@ -586,51 +564,17 @@ function uc_gc_client_countries_form($form, &$form_state) {
     }
   }
   ksort($countries_);
-
   foreach ($countries_ as $name => $gc_code) {
-
-    $region = $gc_countries[$gc_code]['region'];
-    switch ($region) {
-      case 'bacs':
-        $scheme = 'Bacs';
-        break;
-
-      case 'sepa_core':
-        $scheme = 'SEPA';
-        break;
-
-      case 'becs':
-        $scheme = 'BECS';
-        break;
-
-      case 'betalingsservice':
-        $scheme = 'Betalingsservice';
-        break;
-
-      case 'autogiro':
-        $scheme = 'Autogiro';
-        break;
-
-      case 'pnz':
-        $scheme = 'PaymentsNZ';
-        break;
-
-      default:
-        $scheme = $region;
-    }
-
     $countries[$gc_code] = array(
       $name,
-      $scheme,
+      $gc_countries[$gc_code]['region'],
       $gc_countries[$gc_code]['sign'],
     );
     if ($gc_countries[$gc_code]['enabled']) {
       $default_value[$gc_code] = TRUE;
     }
   }
-
   $form = array();
-
   $form['markup'] = array(
     '#markup' => t('<p>Countries should first be enabled in Ubercart before they can be enabled / disabled here.</p>'),
   );
@@ -653,7 +597,6 @@ function uc_gc_client_countries_form($form, &$form_state) {
  * Implements hook_form_submit().
  */
 function uc_gc_client_countries_form_submit($form, &$form_state) {
-
   $countries = $form_state['values']['countries'];
   $gc_countries = variable_get('uc_gc_client_countries');
   foreach ($countries as $code => $country) {
