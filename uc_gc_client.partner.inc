@@ -129,7 +129,6 @@ function uc_gc_client_authenticate() {
  * Handles HTTP requests to GC Partner site.
  */
 function uc_gc_client_post($data) {
-  variable_set('date_format_gocardless', 'Y-m-d');
   $options['headers'] = array(
     'Content-Type' => 'application/json',
     'Cookie' => $_SESSION['uc_gc_client_cookie'],
@@ -161,14 +160,22 @@ function uc_gc_client_connect() {
   if (isset($_POST['environ'])) {
     $_POST['environ'] == 'SANDBOX' ? $ext = '_sandbox' : $ext = '_live';
   }
-  if (isset($_POST['id']) && isset($_POST['environ'])) {
-    variable_set('uc_gc_client_org_id' . $ext, $_POST['id']);
+
+  //Check that the returned password matches the saved one before
+  //proceeding, and return error 403 Forbidden if it does not.
+  if (isset($ext) && isset($_POST['pass']) && $_POST['pass'] == variable_get('uc_gc_client_user_pass' . $ext)) {
+    if (isset($_POST['id']) && isset($_POST['environ'])) {
+      variable_set('uc_gc_client_org_id' . $ext, $_POST['id']);
+    }
+    if (isset($_POST['name']) && isset($_POST['environ'])) {
+      variable_set('uc_gc_client_user_name' . $ext, $_POST['name']);
+    }
+    if (isset($_POST['pass']) && isset($_POST['environ'])) {
+      variable_set('uc_gc_client_user_pass' . $ext, $_POST['pass']);
+    }
   }
-  if (isset($_POST['name']) && isset($_POST['environ'])) {
-    variable_set('uc_gc_client_user_name' . $ext, $_POST['name']);
-  }
-  if (isset($_POST['pass']) && isset($_POST['environ'])) {
-    variable_set('uc_gc_client_user_pass' . $ext, $_POST['pass']);
+  else {
+    drupal_add_http_header('Status', '403 There was a problem connecting.');
   }
 
   // Unset to reduce likelihood of authentication failure if client id

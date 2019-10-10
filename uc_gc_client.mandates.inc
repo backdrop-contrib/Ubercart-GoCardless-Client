@@ -404,7 +404,7 @@ function uc_gc_client_payments_form($form, &$form_state, $order) {
     '#size' => 6,
     '#title' => t('Number of payments'),
     '#default_value' => 1,
-    '#element_validate' => array('element_validate_positive_number'),
+    '#element_validate' => array('uc_gc_client_element_validate_positive_number'),
   );
   $form['adjust']['starting_radio'] = array(
     '#type' => 'radios',

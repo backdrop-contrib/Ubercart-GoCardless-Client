@@ -6,18 +6,6 @@
  */
 
 /**
- * AJAX callback function for gc_client_uc_payment_method_callback().
- */
-function uc_gc_client_sandbox_callback(&$form, &$form_state) {
-  variable_set('uc_gc_client_sandbox', $form_state['values']['uc_gc_client_sandbox']);
-  ctools_include('ajax');
-  ctools_add_js('ajax-responder');
-  $commands[] = ctools_ajax_command_reload();
-  print ajax_render($commands);
-  drupal_exit();
-}
-
-/**
  * Payment method callback.
  */
 function uc_gc_client_uc_payment_method_callback($op, &$order, $form = NULL, &$form_state = NULL) {
@@ -94,13 +82,8 @@ function uc_gc_client_uc_payment_method_callback($op, &$order, $form = NULL, &$f
 
       global $base_url;
       $webhook_url = $base_url . '/gc_client/webhook';
-      // TODO live vs sandbox.
-      if ($sandbox) {
-        $gc_webhook_url = 'https://manage-sandbox.gocardless.com/developers/webhook-endpoints/create';
-      }
-      else {
-        $gc_webhook_url = 'https://manage.gocardless.com/developers/webhook-endpoints/create';
-      }
+      $gc_webhook_url_env = $sandbox ? '-sandbox' : '';
+      $gc_webhook_url = 'https://manage' . $gc_webhook_url_env . '.gocardless.com/developers/webhook-endpoints/create';
       $webhook_prefix = t('To receive webhooks, add <i>@webhook_url</i> as webhook URL and set the secret to the same as the Webhook Secret field from <a target="new" href="@gc_webhook_url">here</a>.', array(
         '@webhook_url' => $webhook_url,
         '@gc_webhook_url' => $gc_webhook_url,
@@ -238,14 +221,36 @@ function uc_gc_client_uc_payment_method_callback($op, &$order, $form = NULL, &$f
       );
 
       // Set message if returning from Partner site after connecting.
-      $client = parse_url(variable_get('uc_gc_client_partner_url'), PHP_URL_HOST);
-      if (parse_url($_SERVER['HTTP_REFERER'], PHP_URL_HOST) == $client) {
-        drupal_set_message(t('You have connected successfully with GoCardless as a client of @client', array('@client' => $client)));
+      if (isset($_GET['status'])) {
+        if ($_GET['status'] == 'connected') {
+          drupal_set_message(t('You have connected successfully with GoCardless'));
+        }
+        //$_GET['status'] will be "failed" if the wrong password was provided
+        //when receiving the authentication credentials from the partner site
+        //during the connection process. See uc_gc_client_connect().
+        elseif ($_GET['status'] == 'failed') {
+          drupal_set_message(t('Connection with GoCardless has failed'), 'error');
+        }
+      }
+      else {
+        drupal_set_message(t('Connection with GoCardless has failed'), 'error');
       }
 
       $form['#submit'][] = 'uc_gc_client_admin_validate';
       return $form;
   }
+}
+
+/**
+ * AJAX callback function for gc_client_uc_payment_method_callback().
+ */
+function uc_gc_client_sandbox_callback(&$form, &$form_state) {
+  variable_set('uc_gc_client_sandbox', $form_state['values']['uc_gc_client_sandbox']);
+  ctools_include('ajax');
+  ctools_add_js('ajax-responder');
+  $commands[] = ctools_ajax_command_reload();
+  print ajax_render($commands);
+  drupal_exit();
 }
 
 /**
@@ -295,10 +300,14 @@ function uc_gc_client_connect_submit($form, $form_state) {
   global $base_url;
   $client_url = urlencode($base_url . '/admin/store/settings/payment/method/gc_client');
   $url = variable_get('uc_gc_client_partner_url') . '/gc_partner/connect/' . $env;
+  $token = user_password(24);
+  variable_set('uc_gc_client_user_pass_' . $env, $token);
   drupal_goto($url, array(
     'query' => array(
       'mail' => variable_get('site_mail', ''),
       'client_url' => $client_url,
+      'token' => $token,
+      'module' => 'Ubercart 7.x',
     ),
   ));
 }
@@ -388,7 +397,7 @@ function uc_gc_client_form_node_form_alter(&$form, $form_state, $form_id) {
       '#default_value' => isset($defaults['price_x']) ? (float) $defaults['price_x'] : 1,
       '#description' => t('Set a multiplier for subscriptions and one-off payments. Use in examples where the GoCardless amount is different to the price, for example a monthly subscription for a weekly order. Leave as 1 if the GoCardless amount and the price are the same.'),
       '#weight' => 3,
-      '#element_validate' => array('element_validate_positive_number'),
+      '#element_validate' => array('uc_gc_client_element_validate_positive_number'),
     );
     $form['gc']['raise_payment'] = array(
       '#type' => 'checkbox',

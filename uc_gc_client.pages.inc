@@ -318,7 +318,7 @@ function uc_gc_client_webhook() {
 
     // Send a success header before processing webhooks, in order to
     // prevent timeouts.
-    header('HTTP/1.1 200 OK');
+    drupal_add_http_header('Status', '200 OK');
 
     // Process the events.
     foreach ($data['events'] as $event) {
@@ -364,7 +364,7 @@ function uc_gc_client_webhook() {
     }
   }
   else {
-    header("HTTP/1.1 498 Invalid Token");
+    drupal_add_http_header('Status', '498 Invalid Token');
   }
 }
 

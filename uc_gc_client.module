@@ -1129,21 +1129,11 @@ function uc_gc_client_working_days_calculate($op, $days, $date) {
 /**
  * Validates a form entry as a positive number.
  */
-function element_validate_positive_number($element, &$form_state) {
+function uc_gc_client_element_validate_positive_number($element, &$form_state) {
   $value = $element['#value'];
   if (($value != '' && !is_numeric($value)) ||
       (is_numeric($value) && $value <= 0)) {
     form_error($element, t('%name must be a positive number.', array('%name' => $element['#title'])));
-  }
-}
-
-/**
- * Validates a form entry as either a zero or a positive number.
- */
-function gc_client_element_validate_integer_positive_zero($element, &$form_state) {
-  $value = $element['#value'];
-  if ($value !== '' && (!is_numeric($value) || intval($value) != $value || $value < 0)) {
-    form_error($element, t('%name must be a positive integer.', array('%name' => $element['#title'])));
   }
 }
 
