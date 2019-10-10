@@ -42,7 +42,7 @@ function uc_gc_client_install() {
 
     $options = array('Weekly', 'Fortnightly', 'Monthly', 'Yearly');
     foreach ($options as $option) {
-      $insert_option = db_insert('uc_attribute_options')
+      db_insert('uc_attribute_options')
         ->fields(array(
           'aid' => $insert_att,
           'name' => $option,
@@ -91,7 +91,7 @@ function uc_gc_client_install() {
  * Implements hook_uninstall().
  */
 function uc_gc_client_uninstall() {
-  //Remove variables.
+  // Remove variables.
   global $conf;
   foreach (array_keys($conf) as $key) {
     if (strpos($key, 'uc_gc_client_') === 0) {

@@ -26,7 +26,6 @@ function uc_gc_client_redirect($redirect, $mandate, $customer, $order_id, $payme
   drupal_set_message($comment);
 
   // @todo Apply some logic here to group products into single payments / subscriptions if applicable
-
   // Set up seperate payments / subscriptions for each product in cart.
   foreach ($order->products as $product) {
     $ucpid = $product->order_product_id;
@@ -84,7 +83,7 @@ function uc_gc_client_redirect($redirect, $mandate, $customer, $order_id, $payme
       'updated' => REQUEST_TIME,
       'sandbox' => variable_get('uc_gc_client_sandbox', TRUE),
     );
-    $db_insert = db_insert('uc_gc_client')
+    db_insert('uc_gc_client')
       ->fields($data)
       ->execute();
 
@@ -92,7 +91,7 @@ function uc_gc_client_redirect($redirect, $mandate, $customer, $order_id, $payme
 
     // If it is a subscription.
     if ($gc_type == 'S') {
-      $calculate = uc_gc_client_price_calculate($order, $product->order_product_id, $next_paymentdate = NULL, $status = NULL);
+      $calculate = uc_gc_client_price_calculate($order, $product->order_product_id, NULL, NULL);
       $currency_code = isset($calculate['currency']) ? $calculate['currency'] : variable_get('uc_currency_code');
       $currency_sign = isset($calculate['sign']) ? $calculate['sign'] : variable_get('uc_currency_sign');
       $payment_details = array(
@@ -148,7 +147,7 @@ function uc_gc_client_redirect($redirect, $mandate, $customer, $order_id, $payme
       // If raise_payment is set for the product then raise the first payment
       // immediately.
       if ($product_uc->raise_payment) {
-        $calculate = uc_gc_client_price_calculate($order, $product->order_product_id, $next_paymentdate = NULL, $status = NULL);
+        $calculate = uc_gc_client_price_calculate($order, $product->order_product_id, NULL, NULL);
         $currency_code = isset($calculate['currency']) ? $calculate['currency'] : variable_get('uc_currency_code');
         $currency_sign = isset($calculate['sign']) ? $calculate['sign'] : variable_get('uc_currency_sign');
         $order->data['initial_payment'] = uc_currency_format($calculate['amount'], $currency_sign);
@@ -181,7 +180,7 @@ function uc_gc_client_redirect($redirect, $mandate, $customer, $order_id, $payme
           // Update next_payment field in gc_client table.
           $payment = $result->response->body->payments;
           isset($interval) ? $next_payment = strtotime('+' . $interval['string']) : $next_payment = NULL;
-          $update = db_update('uc_gc_client')
+          db_update('uc_gc_client')
             ->fields(array(
               'next_payment' => $next_payment,
               'updated' => REQUEST_TIME,
@@ -208,7 +207,7 @@ function uc_gc_client_redirect($redirect, $mandate, $customer, $order_id, $payme
 
           // Update next_payment to now so that it will get picked up on next
           // cron run.
-          $update = db_update('uc_gc_client')
+          db_update('uc_gc_client')
             ->fields(array(
               'next_payment' => REQUEST_TIME,
               'updated' => REQUEST_TIME,
@@ -222,7 +221,7 @@ function uc_gc_client_redirect($redirect, $mandate, $customer, $order_id, $payme
       // payment creation.
       elseif (!is_null($start_date)) {
         // Update next_payment field in uc_gcsubs table.
-        $update = db_update('uc_gc_client')
+        db_update('uc_gc_client')
           ->fields(array(
             'next_payment' => $start_date,
             'updated' => REQUEST_TIME,
@@ -230,8 +229,7 @@ function uc_gc_client_redirect($redirect, $mandate, $customer, $order_id, $payme
           ->condition('ucpid', $ucpid)
           ->execute();
 
-        $calculate = uc_gc_client_price_calculate($order, $product->order_product_id, $next_paymentdate = NULL, $status = NULL);
-        // $calculate['amount'] = $product->price;.
+        $calculate = uc_gc_client_price_calculate($order, $product->order_product_id, NULL, NULL);
         $currency_code = isset($calculate['currency']) ? $calculate['currency'] : variable_get('uc_currency_code');
         $currency_sign = isset($calculate['sign']) ? $calculate['sign'] : variable_get('uc_currency_sign');
         $order->data['initial_payment'] = uc_currency_format($calculate['amount'], $currency_sign);
@@ -382,7 +380,7 @@ function uc_gc_client_webhook_mandates($order, $action, $event) {
         uc_order_comment_save($order->order_id, $order->uid, $comment, 'order', 'processing', FALSE);
         uc_order_update_status($order->order_id, 'processing');
         // Update the status on the database for all products in this order.
-        $update = db_update('uc_gc_client')
+        db_update('uc_gc_client')
           ->fields(array(
             'status' => 'pending',
             'updated' => REQUEST_TIME,
@@ -406,7 +404,7 @@ function uc_gc_client_webhook_mandates($order, $action, $event) {
         $comment = t('Your direct debit mandate @mandate has been set up successfully with your bank.', array('@mandate' => $event['links']['mandate']));
         uc_order_comment_save($order->order_id, $order->uid, $comment, 'order', 'Completed', TRUE);
         uc_order_update_status($order->order_id, 'mandate_active');
-        $update = db_update('uc_gc_client')
+        db_update('uc_gc_client')
           ->fields(array(
             'status' => 'completed',
             'updated' => REQUEST_TIME,
@@ -422,9 +420,7 @@ function uc_gc_client_webhook_mandates($order, $action, $event) {
         uc_order_comment_save($order->order_id, $order->uid, $comment, 'order', 'canceled', TRUE);
 
         uc_order_update_status($order->order_id, 'canceled');
-        // $order->order_status = 'canceled';
-        // uc_order_save($order);
-        $update = db_update('uc_gc_client')
+        db_update('uc_gc_client')
           ->fields(array(
             'status' => 'canceled',
             'updated' => REQUEST_TIME,
@@ -439,7 +435,7 @@ function uc_gc_client_webhook_mandates($order, $action, $event) {
         $comment = t('Your direct debit mandate @mandate has been reinstated at GoCardless.', array('@mandate' => $event['links']['mandate']));
         uc_order_comment_save($order->order_id, $order->uid, $comment, 'order', 'processing', FALSE);
         uc_order_update_status($order->order_id, 'processing');
-        $update = db_update('uc_gc_client')
+        db_update('uc_gc_client')
           ->fields(array(
             'status' => 'pending',
             'updated' => REQUEST_TIME,
@@ -455,7 +451,6 @@ function uc_gc_client_webhook_mandates($order, $action, $event) {
  * Processes 'payments' webhooks.
  */
 function uc_gc_client_webhook_payments($order, $action, $event, $resource) {
-  $mandate = $resource->links->mandate;
   $order_id = $order->order_id;
   $amount = $resource->amount / 100;
   $status = db_select('uc_orders', 'o')

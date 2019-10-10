@@ -29,13 +29,8 @@ function uc_gc_client_uc_payment_method_callback($op, &$order, $form = NULL, &$f
       else {
         $sandbox = variable_get('uc_gc_client_sandbox', TRUE);
       }
-
       $sandbox ? $ext = '_sandbox' : $ext = '_live';
-      $user = variable_get('uc_gc_client_user_name' . $ext);
-      $pass = variable_get('uc_gc_client_user_pass' . $ext);
-
       $auth = uc_gc_client_authenticate();
-
       if ($auth == 200) {
         $response = uc_gc_client_get();
         isset($response->environ) ? $connected = TRUE : $connected = FALSE;
@@ -57,7 +52,7 @@ function uc_gc_client_uc_payment_method_callback($op, &$order, $form = NULL, &$f
       );
       $form['connect']['uc_gc_client_sandbox'] = array(
         '#type' => 'checkbox',
-        '#title' => t('<b>Enable Sandbox</b>'),
+        '#title' => '<b>' .  t('Enable Sandbox') . '</b>',
         '#description' => t('Sandbox: GoCardless will operate in a test environment, and no real banking activity will occur.'),
         '#default_value' => $sandbox,
         '#ajax' => array(
@@ -67,18 +62,18 @@ function uc_gc_client_uc_payment_method_callback($op, &$order, $form = NULL, &$f
         ),
       );
 
-      $markup = '<br /><p><b>Connect / disconnect with GoCardless</b></p>';
+      $markup = '<br /><p><b>' . t('Connect / disconnect with GoCardless') . '</b></p>';
       if (!$connected) {
-        $markup .= "<p>After clicking 'Connect' you will be redirected to the GoCardless where you can create an account and connect your site as a client of Seamless-CMS.co.uk</p>";
+        $markup .= '<p>' . t('After clicking \'Connect\' you will be redirected to the GoCardless where you can create an account and connect your site as a client of Seamless-CMS.co.uk') . '</p>';
         $form['connect']['markup'] = array(
           '#markup' => $markup,
         );
         $form['connect']['connect'] = array(
           '#type' => 'submit',
           '#disabled' => !$sandbox && !isset($_SERVER['HTTPS']) ? TRUE : FALSE,
-          '#value' => $sandbox ? 'Connect SANDBOX' : 'Connect LIVE',
+          '#value' => $sandbox ? t('Connect SANDBOX') : t('Connect LIVE'),
           '#submit' => array('uc_gc_client_connect_submit'),
-          '#suffix' => !$sandbox && !isset($_SERVER['HTTPS']) ? t('<br /><i>Site needs to be secure (https) before you can connect to GoCardless LIVE.</i>') : NULL,
+          '#suffix' => !$sandbox && !isset($_SERVER['HTTPS']) ? '<br /><i>' . t('Site needs to be secure (https) before you can connect to GoCardless LIVE.') . '</i>' : NULL,
         );
       }
       else {
@@ -91,9 +86,9 @@ function uc_gc_client_uc_payment_method_callback($op, &$order, $form = NULL, &$f
         );
         $form['connect']['disconnect'] = array(
           '#type' => 'submit',
-          '#value' => $sandbox ? 'Disconnect SANDBOX' : 'Disconnect LIVE',
+          '#value' => $sandbox ? t('Disconnect SANDBOX') : t('Disconnect LIVE'),
           '#submit' => array('uc_gc_client_disconnect_submit'),
-          '#attributes' => array('onclick' => 'if (!confirm("Are you sure you want to disconnect your site from GoCardless?")) {return FALSE;}'),
+          '#attributes' => array('onclick' => 'if (!confirm("' . t('Are you sure you want to disconnect your site from GoCardless?') . '")) {return false;}'),
         );
       }
 
@@ -106,12 +101,14 @@ function uc_gc_client_uc_payment_method_callback($op, &$order, $form = NULL, &$f
       else {
         $gc_webhook_url = 'https://manage.gocardless.com/developers/webhook-endpoints/create';
       }
-      $webhook_prefix = t('To receive webhooks, add <i>@webhook_url</i> as webhook URL and set the secret to the same as the Webhook Secret field from <a target="new" href="@gc_webhook_url">here</a>.<br /><br />', array('@webhook_url' => $webhook_url, '@gc_webhook_url' => $gc_webhook_url));
+      $webhook_prefix = t('To receive webhooks, add <i>@webhook_url</i> as webhook URL and set the secret to the same as the Webhook Secret field from <a target="new" href="@gc_webhook_url">here</a>.', array(
+        '@webhook_url' => $webhook_url,
+        '@gc_webhook_url' => $gc_webhook_url,
+      )) . '<br /><br />';
 
       $form['connect']['uc_gc_client_webhook' . $ext] = array(
-        // '#type' => 'password',.
         '#type' => 'textfield',
-        '#title' => 'Webhook secret',
+        '#title' => t('Webhook secret'),
         '#default_value' => $sandbox ? variable_get('uc_gc_client_webhook_sandbox') : variable_get('uc_gc_client_webhook_live'),
         '#field_prefix' => $webhook_prefix,
       );
@@ -129,14 +126,14 @@ function uc_gc_client_uc_payment_method_callback($op, &$order, $form = NULL, &$f
         '#default_value' => variable_get('uc_gc_client_dom'),
         '#size' => 25,
         '#maxlength' => 24,
-        '#description' => t("Enter one or more days of the month, upon which direct debits will start. The system will automatically choose the next available date from those you have provided. Values must be seperated by a comma.<br />These values will be ignored if there is a valid Start Date set for individual products, or if they are set to create a payment immediately."),
+        '#description' => t('Enter one or more days of the month, upon which direct debits will start. The system will automatically choose the next available date from those you have provided. Values must be seperated by a comma.<br />These values will be ignored if there is a valid Start Date set for individual products, or if they are set to create a payment immediately.'),
         '#required' => FALSE,
       );
       $form['global']['uc_gc_client_payments_tab'] = array(
         '#type' => 'checkbox',
         '#title' => t('Hide Payments tab'),
         '#default_value' => variable_get('uc_gc_client_payments_tab'),
-        '#description' => t("Ubercart Payments do not work with GoCardless, so checking this will hide the Payments tab when viewing any orders created through GoCardless."),
+        '#description' => t('Ubercart Payments do not work with GoCardless, so checking this will hide the Payments tab when viewing any orders created through GoCardless.'),
       );
       $form['global']['uc_gc_client_currencies'] = array(
         '#type' => 'checkbox',
@@ -148,7 +145,7 @@ function uc_gc_client_uc_payment_method_callback($op, &$order, $form = NULL, &$f
         '#type' => 'textfield',
         '#title' => t('fixer.io'),
         '#default_value' => variable_get('uc_gc_client_fixer', NULL),
-        '#description' => "API key for fixer.io",
+        '#description' => t('API key for fixer.io'),
         '#size' => 40,
         '#maxlength' => 40,
         '#states' => array(
@@ -179,7 +176,7 @@ function uc_gc_client_uc_payment_method_callback($op, &$order, $form = NULL, &$f
         '#type' => 'textarea',
         '#title' => t('Adjustment titles'),
         '#default_value' => variable_get('uc_gc_client_preauth_adjs'),
-        '#description' => "Provide a list of pre-defined Scheduled Adjustment titles. One per line.",
+        '#description' => t('Provide a list of pre-defined Scheduled Adjustment titles. One per line.'),
         '#resizable' => FALSE,
         '#cols' => 20,
         '#rows' => 10,
@@ -195,11 +192,11 @@ function uc_gc_client_uc_payment_method_callback($op, &$order, $form = NULL, &$f
         '#collapsed' => FALSE,
       );
       $form['checkout']['uc_gc_client_optional_checkout_review'] = array(
-        '#title' => t('<b>Optional Checkout Review page</b>'),
+        '#title' => '<b>' .  t('Optional Checkout Review page') . '</b>',
         '#type' => 'checkbox',
         '#default_value' => variable_get('uc_gc_client_optional_checkout_review'),
         '#required' => FALSE,
-        '#description' => t("Check this to emit the Checkout Review page.<br />Don't use this if you have the Ubercart Optional Checkout Review module installed, or you are using other payment methods in addition to GoCardless Client."),
+        '#description' => t('Check this to emit the Checkout Review page.') . '<br />' . t('Don\'t use this if you have the Ubercart Optional Checkout Review module installed, or you are using other payment methods in addition to GoCardless Client.'),
       );
       $form['checkout']['uc_gc_client_checkout_label'] = array(
         '#type' => 'textfield',
@@ -219,7 +216,7 @@ function uc_gc_client_uc_payment_method_callback($op, &$order, $form = NULL, &$f
         '#type' => 'textfield',
         '#title' => t('Email'),
         '#default_value' => variable_get('uc_gc_client_warnings_email'),
-        '#description' => "Email address to send warnings.",
+        '#description' => t('Email address to send warnings.'),
         '#size' => 40,
         '#maxlength' => 40,
       );
@@ -227,16 +224,16 @@ function uc_gc_client_uc_payment_method_callback($op, &$order, $form = NULL, &$f
         '#prefix' => '<p>',
         '#suffix' => '</p>',
         '#type' => 'checkbox',
-        '#title' => t('<b>Enable webhook debugging</b>'),
-        '#description' => 'Webhooks recieved from GoCardless will be written to the log.',
+        '#title' => '<b>' . t('Enable webhook debugging') . '</b>',
+        '#description' => t('Webhooks recieved from GoCardless will be written to the log.'),
         '#default_value' => variable_get('uc_gc_client_debug_webhook', FALSE),
       );
       $form['debug']['uc_gc_client_debug_api'] = array(
         '#prefix' => '<p>',
         '#suffix' => '</p>',
         '#type' => 'checkbox',
-        '#title' => t('<b>Enable API debugging</b>'),
-        '#description' => 'Responses from the Partner site to API posts will be written to the log.',
+        '#title' => '<b>' . t('Enable API debugging') . '</b>',
+        '#description' => t('Responses from the Partner site to API posts will be written to the log.'),
         '#default_value' => variable_get('uc_gc_client_debug_api', FALSE),
       );
 
@@ -322,7 +319,7 @@ function uc_gc_client_drupal_goto_alter(&$path, &$options, &$http_response_code)
 }
 
 /**
- * Implements hook_form_alter().
+ * Implements hook_form_FORM_ID_alter().
  *
  * Add extra GoCardless settings to Product node Edit form.
  */
@@ -366,7 +363,7 @@ function uc_gc_client_form_node_form_alter(&$form, $form_state, $form_id) {
       '#weight' => 1,
       '#size' => 3,
       '#maxlength' => 3,
-      '#description' => t("The default interval length between direct debit payments. This setting is required for Subscription payments.<br />It can be set for One-off payments, or leave unset if regular payments are not expected.<br>This value will be overridden if the Interval Attribute is set for a product."),
+      '#description' => t('The default interval length between direct debit payments. This setting is required for Subscription payments.<br />It can be set for One-off payments, or leave unset if regular payments are not expected.<br />This value will be overridden if the Interval Attribute is set for a product.'),
       '#element_validate' => array('element_validate_integer_positive'),
       '#required' => FALSE,
     );
@@ -376,12 +373,12 @@ function uc_gc_client_form_node_form_alter(&$form, $form_state, $form_id) {
       '#default_value' => isset($defaults['interval_unit']) ? $defaults['interval_unit'] : NULL,
       '#weight' => 2,
       '#options' => array(
-        'week' => 'week',
-        'month' => 'month',
-        'year' => 'year',
+        'week' => t('week'),
+        'month' => t('month'),
+        'year' => t('year'),
       ),
       "#empty_option" => t('- None -'),
-      '#description' => t("The default interval unit between direct debit payments. This setting is required for Subscription payments.<br />It can be set for One-off payments, or leave unset if regular payments are not expected.<br>This value will be overridden if the Interval attribute is set for a product."),
+      '#description' => t('The default interval unit between direct debit payments. This setting is required for Subscription payments.<br />It can be set for One-off payments, or leave unset if regular payments are not expected.<br />This value will be overridden if the Interval attribute is set for a product.'),
       '#required' => FALSE,
     );
     $form['gc']['price_x'] = array(
@@ -399,7 +396,7 @@ function uc_gc_client_form_node_form_alter(&$form, $form_state, $form_id) {
       '#weight' => 4,
       '#default_value' => !is_null($defaults['raise_payment']) ? $defaults['raise_payment'] : 0,
       '#title' => t("Automatically raise a payment upon completion of checkout"),
-      '#description' => t("Checking this will override any other settings for raising the initial payment.<br />Leave unchecked if you want another module to handle raising the initial payment.<br /><br />"),
+      '#description' => t('Checking this will override any other settings for raising the initial payment.<br />Leave unchecked if you want another module to handle raising the initial payment.') . '<br /><br />',
     );
     $form['gc']['start_date'] = array(
       '#title' => t('Start date'),
@@ -409,7 +406,7 @@ function uc_gc_client_form_node_form_alter(&$form, $form_state, $form_id) {
       '#date_year_range' => '0:+1',
       '#default_value' => !is_null($defaults['start_date']) ? date('Y-m-d', $defaults['start_date']) : NULL,
       '#weight' => 5,
-      '#description' => t("Specify a start date for the customer's new mandate. If this is enabled then the start date provided will override any other start date settings."),
+      '#description' => t('Specify a start date for the customer\'s new mandate. If this is enabled then the start date provided will override any other start date settings.'),
       '#states' => array(
         'visible' => array(
           ':input[name="raise_payment"]' => array('checked' => FALSE),
@@ -428,7 +425,7 @@ function uc_gc_client_form_node_form_alter(&$form, $form_state, $form_id) {
  */
 function uc_gc_client_node_insert($node) {
   if (uc_product_is_product($node)) {
-    $insert = db_insert('uc_gc_client_products')
+    db_insert('uc_gc_client_products')
       ->fields(array(
         'nid' => $node->nid,
         'type' => !empty($node->gc_type) ? $node->gc_type : NULL,
@@ -489,7 +486,7 @@ function uc_gc_client_node_form_submit($form, &$form_state) {
  */
 function uc_gc_client_node_delete($node) {
   if (uc_product_is_product($node)) {
-    $delete = db_delete('uc_gc_client_products')
+    db_delete('uc_gc_client_products')
       ->condition('nid', $node->nid, '=')
       ->execute();
   }
@@ -536,7 +533,7 @@ function uc_gc_client_node_view($node, $view_mode, $langcode) {
     if ($extras['start_date']) {
       $start_date = format_date($extras['start_date'], 'uc_store');
       $node->content['start_date'] = array(
-        '#markup' => '<p>Your first direct debit payment will be paid on <b>' . $start_date . '</b>.</p>',
+        '#markup' => '<p>' . t('Your first direct debit payment will be paid on') . '<b>' . $start_date . '</b>.</p>',
         '#value' => $start_date,
       );
     }
@@ -576,7 +573,7 @@ function uc_gc_client_countries_form($form, &$form_state) {
   }
   $form = array();
   $form['markup'] = array(
-    '#markup' => t('<p>Countries should first be enabled in Ubercart before they can be enabled / disabled here.</p>'),
+    '#markup' => '<p>' .  t('Countries should first be enabled in Ubercart before they can be enabled / disabled here.') . '</p>',
   );
   $header = array('Country', 'Direct debit scheme', 'Currency');
   $form['countries'] = array(

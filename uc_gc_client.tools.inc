@@ -90,7 +90,7 @@ function uc_gc_client_priceshift_form($form, $form_state) {
   );
   $form['product'] = array(
     '#type' => 'select',
-    '#title' => 'Select product for updating price',
+    '#title' => t('Select product for updating price'),
     '#options' => $product_select,
     '#empty_option' => t('- Select -'),
     '#states' => array(
@@ -101,8 +101,11 @@ function uc_gc_client_priceshift_form($form, $form_state) {
   );
   $form['operator'] = array(
     '#type' => 'select',
-    '#title' => 'Select operation',
-    '#options' => array('increase' => 'increase', 'decrease' => 'decrease'),
+    '#title' => t('Select operation'),
+    '#options' => array(
+      'increase' => t('increase'),
+      'decrease' => t('decrease'),
+    ),
     '#empty_option' => t('- Select -'),
   );
   $form['cost'] = array(

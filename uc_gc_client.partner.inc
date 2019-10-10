@@ -19,8 +19,8 @@ function uc_gc_client_get() {
   $data = array();
   $options['headers'] = array(
     'Content-Type' => 'application/json',
-    'Cookie' => $_SESSION['gc_client_cookie'],
-    'X-CSRF-Token' => $_SESSION['gc_client_token'],
+    'Cookie' => $_SESSION['uc_gc_client_cookie'],
+    'X-CSRF-Token' => $_SESSION['uc_gc_client_token'],
   );
   variable_get('uc_gc_client_sandbox') ? $data['environment'] = 'SANDBOX' : $data['environment'] = 'LIVE';
   variable_get('uc_gc_client_sandbox') ? $ext = '_sandbox' : $ext = '_live';
@@ -51,7 +51,7 @@ function uc_gc_client_api($params) {
       if (variable_get('uc_gc_client_debug_api', FALSE)) {
         watchdog("uc_gc_client", $message, NULL, WATCHDOG_ERROR);
       }
-      return $error = $message;
+      return $message;
     }
     else {
       if (variable_get('uc_gc_client_debug_api', FALSE)) {
@@ -77,14 +77,14 @@ function uc_gc_client_api($params) {
  * Handles Sevices module session authentication with GC Partner site.
  */
 function uc_gc_client_authenticate() {
-  // unset($_SESSION['gc_client_cookie_created']);.
-  if (isset($_SESSION['gc_client_cookie_created']) && $_SESSION['gc_client_cookie_created'] < REQUEST_TIME - 1800) {
-    unset($_SESSION['gc_client_cookie']);
-    unset($_SESSION['gc_client_cookie_created']);
+  // unset($_SESSION['uc_gc_client_cookie_created']);.
+  if (isset($_SESSION['uc_gc_client_cookie_created']) && $_SESSION['uc_gc_client_cookie_created'] < REQUEST_TIME - 1800) {
+    unset($_SESSION['uc_gc_client_cookie']);
+    unset($_SESSION['uc_gc_client_cookie_created']);
   }
 
-  if (!isset($_SESSION['gc_client_cookie_created'])) {
-    $sandbox = variable_get('uc_gc_client_sandbox') ? $ext = '_sandbox' : $ext = '_live';
+  if (!isset($_SESSION['uc_gc_client_cookie_created'])) {
+    variable_get('uc_gc_client_sandbox') ? $ext = '_sandbox' : $ext = '_live';
     // Login first.
     $data = array(
       'username' => variable_get('uc_gc_client_user_name' . $ext),
@@ -104,18 +104,18 @@ function uc_gc_client_authenticate() {
 
     if ($result->code == 200) {
       // Get X-CRSF token, and save cookie and token.
-      $_SESSION['gc_client_cookie'] = $result_data->session_name . '=' . $result_data->sessid;
-      $_SESSION['gc_client_cookie_created'] = REQUEST_TIME;
+      $_SESSION['uc_gc_client_cookie'] = $result_data->session_name . '=' . $result_data->sessid;
+      $_SESSION['uc_gc_client_cookie_created'] = REQUEST_TIME;
       $xcrf_url = variable_get('uc_gc_client_partner_url') . '/services/session/token';
       $xcrf_options = array(
         'method' => 'GET',
         'headers' => array(
-          'Cookie' => $_SESSION['gc_client_cookie'],
+          'Cookie' => $_SESSION['uc_gc_client_cookie'],
         ),
       );
       $xcrf_result = drupal_http_request($xcrf_url, $xcrf_options);
       $token = $xcrf_result->data;
-      $_SESSION['gc_client_token'] = $token;
+      $_SESSION['uc_gc_client_token'] = $token;
     }
     return $result->code;
   }
@@ -132,8 +132,8 @@ function uc_gc_client_post($data) {
   variable_set('date_format_gocardless', 'Y-m-d');
   $options['headers'] = array(
     'Content-Type' => 'application/json',
-    'Cookie' => $_SESSION['gc_client_cookie'],
-    'X-CSRF-Token' => $_SESSION['gc_client_token'],
+    'Cookie' => $_SESSION['uc_gc_client_cookie'],
+    'X-CSRF-Token' => $_SESSION['uc_gc_client_token'],
   );
   variable_get('uc_gc_client_sandbox') ? $data['environment'] = 'SANDBOX' : $data['environment'] = 'LIVE';
   variable_get('uc_gc_client_sandbox') ? $ext = '_sandbox' : $ext = '_live';
@@ -173,8 +173,8 @@ function uc_gc_client_connect() {
 
   // Unset to reduce likelihood of authentication failure if client id
   // reconnecting.
-  if (isset($_SESSION['gc_client_cookie_created'])) {
-    unset($_SESSION['gc_client_cookie_created']);
+  if (isset($_SESSION['uc_gc_client_cookie_created'])) {
+    unset($_SESSION['uc_gc_client_cookie_created']);
   }
 }
 
@@ -197,8 +197,8 @@ function uc_gc_client_disconnect_submit($form, $form_state) {
     else {
       drupal_set_message(t('There was a problem disconnecting from GoCardless'), 'error');
     }
-    if (isset($_SESSION['gc_client_cookie_created'])) {
-      unset($_SESSION['gc_client_cookie_created']);
+    if (isset($_SESSION['uc_gc_client_cookie_created'])) {
+      unset($_SESSION['uc_gc_client_cookie_created']);
     }
     $ext = $form_state['values']['ext'];
     variable_del('uc_gc_client_org_id' . $ext);

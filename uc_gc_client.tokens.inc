@@ -25,11 +25,6 @@ function uc_gc_client_token_info() {
  * Implements hook_tokens().
  */
 function uc_gc_client_tokens($type, $tokens, $data = array(), $options = array()) {
-  $language_code = NULL;
-  if (isset($options['language'])) {
-    $language_code = $options['language']->language;
-  }
-  $sanitize = !empty($options['sanitize']);
   $replacements = array();
   if ($type == 'uc_order' && !empty($data['uc_order'])) {
     $order = $data['uc_order'];

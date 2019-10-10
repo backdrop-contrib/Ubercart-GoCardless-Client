@@ -47,6 +47,6 @@ function uc_gc_client_action_cancel($order) {
       'action' => 'cancel',
       'mandate' => $gc_client->gcid,
     );
-    $result = uc_gc_client_api($params);
+    uc_gc_client_api($params);
   }
 }

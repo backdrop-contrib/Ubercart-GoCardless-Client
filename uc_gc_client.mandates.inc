@@ -5,7 +5,6 @@
  * Provides an interface for managing customer's GoCardless mandates.
  */
 
-
 /**
  * Displays the GoCardless Payments edit screen .
  */
@@ -35,7 +34,10 @@ function uc_gc_client_payments_form($form, &$form_state, $order) {
   }
   if ($count == 1) {
     $ucpid = reset($gcs)->ucpid;
-    $text_top = t('<h3><b>Administrate <a href = "@url">@title</a></b></h3>', array('@title' => $product_select[$ucpid], '@url' => url('admin/store/orders/' . $order->order_id)));
+    $text_top = '<h3><b>' . t('Administrate <a href = "@url">@title</a>', array(
+      '@title' => $product_select[$ucpid],
+      '@url' => url('admin/store/orders/' . $order->order_id),
+    )) . '</b></h3>';
     $form['text_top'] = array(
       '#type' => 'item',
       '#markup' => $text_top,
@@ -46,11 +48,8 @@ function uc_gc_client_payments_form($form, &$form_state, $order) {
     );
   }
   else {
-    if (!empty($form_state['input']['ucpid'])) {
-      $ucpid = $form_state['input']['ucpid'];
-    }
-    elseif (isset($_SESSION['change_ucpid_' . $order->order_id])) {
-      $ucpid = $_SESSION['change_ucpid_' . $order->order_id]['ucpid'];
+    if (isset($_SESSION['uc_gc_client_change_ucpid_' . $order->order_id])) {
+      $ucpid = $_SESSION['uc_gc_client_change_ucpid_' . $order->order_id]['ucpid'];
     }
     elseif (!isset($ucpid)) {
       $ucpid = reset($gcs)->ucpid;
@@ -60,7 +59,10 @@ function uc_gc_client_payments_form($form, &$form_state, $order) {
       '#suffix' => '</div>',
     );
 
-    $text_top = t('<h3><b>Administrate <a href = "@url">@title</a></b></h3>', array('@title' => $product_select[$ucpid], '@url' => url('admin/store/orders/' . $order->order_id)));
+    $text_top = '<h3><b>' . t('Administrate <a href = "@url">@title</a>', array(
+      '@title' => $product_select[$ucpid],
+      '@url' => url('admin/store/orders/' . $order->order_id),
+    )) . '</b></h3>';
 
     $form['text_top'] = array(
       '#type' => 'item',
@@ -92,16 +94,12 @@ function uc_gc_client_payments_form($form, &$form_state, $order) {
   }
 
   $mandate = $result->response->body->mandates;
-  if ($mandate->scheme == 'bacs') {
-    $sign = '£';
+  foreach (uc_gc_client_countries_define() as $gc_country) {
+    if ($gc_country['region'] == $mandate->scheme) {
+      $sign = $gc_country['sign'];
+      break;
+    }
   }
-  elseif ($mandate->scheme == 'sepa_core') {
-    $sign = '€';
-  }
-  else {
-    $sign = 'kr';
-  }
-
   $product = $order->products[$ucpid];
 
   $interval = $product->data['interval_params']['length'] . ' ' . $product->data['interval_params']['unit'];
@@ -110,25 +108,25 @@ function uc_gc_client_payments_form($form, &$form_state, $order) {
     // Payments.
     $type = 'One-off payments';
     $header = array(
-      'product',
-      'payment type',
-      'cost',
-      'price',
-      'payment interval',
-      'next scheduled payment creation',
-      'next possible charge date',
-      'gocardless id',
-      'created',
-      'status',
+      t('product'),
+      t('payment type'),
+      t('cost'),
+      t('price'),
+      t('payment interval'),
+      t('next scheduled payment creation'),
+      t('next possible charge date'),
+      t('gocardless id'),
+      t('created'),
+      t('status'),
     );
 
     $payment_header = array(
-      'Created at',
-      'Payment name',
-      'Payment ID',
-      'Amount',
-      'Status',
-      'Charge customer at',
+      t('Created at'),
+      t('Payment name'),
+      t('Payment ID'),
+      t('Amount'),
+      t('Status'),
+      t('Charge customer at'),
       '',
     );
 
@@ -137,12 +135,12 @@ function uc_gc_client_payments_form($form, &$form_state, $order) {
       $type,
       uc_currency_format($product->cost),
       uc_currency_format($product->price),
-      $interval == ' ' ? 'Not set' : $interval,
+      $interval == ' ' ? t('Not set') : $interval,
       $mandate->status != 'cancelled' && !is_null($gc->next_payment) ? format_date($gc->next_payment, 'medium') : '-',
       !is_null($mandate->next_possible_charge_date) ? format_date(strtotime($mandate->next_possible_charge_date), 'uc_store') : '-',
-      $mandate->id,
+      check_plain($mandate->id),
       format_date(strtotime($mandate->created_at), 'uc_store'),
-      $mandate->status,
+      check_plain($mandate->status),
     );
     $params = array(
       'endpoint' => 'payments',
@@ -157,24 +155,24 @@ function uc_gc_client_payments_form($form, &$form_state, $order) {
     // Subscriptions.
     $type = 'Subscription';
     $header = array(
-      'product',
-      'payment type',
-      'cost',
-      'price',
-      'payment interval',
-      'next possible charge date',
-      'gocardless id',
-      'created',
-      'status',
+      t('product'),
+      t('payment type'),
+      t('cost'),
+      t('price'),
+      t('payment interval'),
+      t('next possible charge date'),
+      t('gocardless id'),
+      t('created'),
+      t('status'),
     );
 
     $payment_header = array(
-      'Payment name',
-      'Payment ID',
-      'Amount',
-      'Created at',
-      'Status',
-      'Charge customer at',
+      t('Payment name'),
+      t('Payment ID'),
+      t('Amount'),
+      t('Created at'),
+      t('Status'),
+      t('Charge customer at'),
     );
 
     $rows[$product->order_product_id] = array(
@@ -184,9 +182,9 @@ function uc_gc_client_payments_form($form, &$form_state, $order) {
       uc_currency_format($product->price),
       $interval,
       format_date(strtotime($mandate->next_possible_charge_date), 'uc_store'),
-      $mandate->id,
+      check_plain($mandate->id),
       format_date(strtotime($mandate->created_at), 'uc_store'),
-      $mandate->status,
+      check_plain($mandate->status),
     );
 
     $params = array(
@@ -240,7 +238,7 @@ function uc_gc_client_payments_form($form, &$form_state, $order) {
     }
 
     if ($payment->status == 'pending_submission') {
-      $link = l(t('Cancel'), '/admin/store/orders/' . $order->order_id . '/gocardless/cancel_payment/' . $payment->id);
+      $link = l(t('Cancel'), '/admin/store/orders/' . $order->order_id . '/gocardless/cancel_payment/' . check_plain($payment->id));
     }
     else {
       $link = NULL;
@@ -248,10 +246,10 @@ function uc_gc_client_payments_form($form, &$form_state, $order) {
 
     $payment_rows[] = array(
       format_date(strtotime($payment->created_at), 'uc_store'),
-      $payment->description,
-      $payment->id,
+      check_plain($payment->description),
+      check_plain($payment->id),
       uc_currency_format($payment->amount / 100, $sign),
-      $payment->status,
+      check_plain($payment->status),
       format_date(strtotime($payment->charge_date), 'uc_store'),
       $link,
     );
@@ -268,20 +266,23 @@ function uc_gc_client_payments_form($form, &$form_state, $order) {
 
   if (isset($payment_rows)) {
 
-    $title = t('Payments for @title', array('@title' => $product_select[$ucpid]));
+    $title = t('Payments for @title', array(
+      '@title' => $product_select[$ucpid],
+    ));
     $form['payment_tables'] = array(
       '#type' => 'fieldset',
-      '#title' => $title,
+      '#title' => check_plain($title),
       '#collapsible' => FALSE,
       '#collapsed' => FALSE,
     );
-    // $form['payment_tables'][$key]['payments_table'] = array(.
     $form['payment_tables']['payments_table'] = array(
       '#theme' => 'table',
       '#header' => $payment_header,
       '#rows' => isset($payment_rows) ? $payment_rows : NULL,
       '#empty' => t('There are no payments for this product yet.'),
-      '#suffix' => t('Total confirmed payments: @payment_total', array('@payment_total' => uc_currency_format($payment_total / 100, $sign))),
+      '#suffix' => t('Total confirmed payments: @payment_total', array(
+        '@payment_total' => uc_currency_format($payment_total / 100, $sign),
+      )),
     );
   }
 
@@ -323,7 +324,7 @@ function uc_gc_client_payments_form($form, &$form_state, $order) {
   );
   $form['create_payment']['payment_submit'] = array(
     '#type' => 'submit',
-    '#value' => 'Instruct GoCardless to create a Payment',
+    '#value' => t('Create a payment with GoCardless'),
     '#validate' => array('uc_gc_client_create_payment_validate'),
     '#submit' => array('uc_gc_client_create_payment_submit'),
   );
@@ -342,11 +343,11 @@ function uc_gc_client_payments_form($form, &$form_state, $order) {
   if (!empty($adjustments)) {
     $adj_rows = array();
     foreach ($adjustments as $adj) {
-      $adj->status == 1 ? $cancel = l(t('cancel'), 'admin/store/orders/' . $gc->ucid . '/gocardless/scheduled_action/cancel/' . $adj->sid . '/' . $adj->aid, $options = array()) : $cancel = NULL;
+      $adj->status == 1 ? $cancel = l(t('cancel'), 'admin/store/orders/' . $gc->ucid . '/gocardless/scheduled_action/cancel/' . $adj->sid . '/' . $adj->aid, array()) : $cancel = NULL;
       $adj->status == 1 ? $spacer = ' | ' : $spacer = NULL;
-      $delete = l(t('delete'), 'admin/store/orders/' . $gc->ucid . '/gocardless/scheduled_action/delete/' . $adj->sid . '/' . $adj->aid, $options = array());
+      $delete = l(t('delete'), 'admin/store/orders/' . $gc->ucid . '/gocardless/scheduled_action/delete/' . $adj->sid . '/' . $adj->aid, array());
       $actions = $cancel . $spacer . $delete;
-      $status = array('Cancelled', 'Pending', 'Complete')[$adj->status];
+      $status = array(t('Cancelled'), t('Pending'), t('Complete'))[$adj->status];
       $adj_rows[] = array(
         $adj->title,
         $adj->amount,
@@ -362,8 +363,8 @@ function uc_gc_client_payments_form($form, &$form_state, $order) {
     '#title' => t('Schedule adjustments'),
     '#collapsible' => TRUE,
     '#collapsed' => TRUE,
-    '#description' => t("<p>Make a temporary change to the payment amount that is created with GoCardless.</p>"),
-    '#prefix' => t('<div id="adjustments"></div>'),
+    '#description' => '<p>' . t('Make a temporary change to the payment amount that is created with GoCardless.') . '</p>',
+    '#prefix' => '<div id="adjustments"></div>',
     '#access' => $gc->type == 'P' ? TRUE : FALSE,
   );
   if (isset($adj_rows)) {
@@ -373,8 +374,8 @@ function uc_gc_client_payments_form($form, &$form_state, $order) {
       '#collapsible' => TRUE,
       '#collapsed' => TRUE,
     );
-    $adj_headers = array('Title', 'Adjustment', 'Date', 'Status', 'Actions');
-    // Adjustments tables
+    $adj_headers = array(t('Title'), t('Adjustment'), t('Date'), t('Status'), t('Actions'));
+    // Adjustments tables.
     $form['adjust']['adjust_table']['table'] = array(
       '#theme' => 'table',
       '#header' => $adj_headers,
@@ -391,7 +392,7 @@ function uc_gc_client_payments_form($form, &$form_state, $order) {
   $form['adjust']['operator'] = array(
     '#type' => 'select',
     '#title' => t('Operation'),
-    '#options' => array('add' => 'add', 'subtract' => 'subtract'),
+    '#options' => array('add' => t('add'), 'subtract' => t('subtract')),
   );
   $form['adjust']['adjustment'] = array(
     '#type' => 'uc_price',
@@ -408,7 +409,10 @@ function uc_gc_client_payments_form($form, &$form_state, $order) {
   $form['adjust']['starting_radio'] = array(
     '#type' => 'radios',
     '#title' => t('Starting from'),
-    '#options' => array(0 => 'Next billing day', 1 => 'Select another date'),
+    '#options' => array(
+      t('Next billing day'),
+      t('Select another date'),
+    ),
     '#default_value' => 0,
   );
   $form['adjust']['starting'] = array(
@@ -434,7 +438,7 @@ function uc_gc_client_payments_form($form, &$form_state, $order) {
   $form['adjust']['plus']['plus_operator'] = array(
     '#type' => 'select',
     '#title' => t('Operation'),
-    '#options' => array('add' => 'add', 'subtract' => 'subtract'),
+    '#options' => array('add' => t('add'), 'subtract' => t('subtract')),
   );
   $form['adjust']['plus']['plus_adjustment'] = array(
     '#type' => 'uc_price',
@@ -448,7 +452,7 @@ function uc_gc_client_payments_form($form, &$form_state, $order) {
   );
   $form['adjust']['adjust_button'] = array(
     '#type' => 'submit',
-    '#value' => 'Schedule',
+    '#value' => t('Schedule'),
     '#validate' => array('uc_gc_client_adjust_validate'),
     '#submit' => array('uc_gc_client_adjust_submit'),
   );
@@ -470,7 +474,7 @@ function uc_gc_client_payments_form($form, &$form_state, $order) {
   );
   $form['change_price']['price_button'] = array(
     '#type' => 'submit',
-    '#value' => 'Change price',
+    '#value' => t('Change price'),
     '#submit' => array('uc_gc_client_change_price_submit'),
   );
 
@@ -491,7 +495,7 @@ function uc_gc_client_payments_form($form, &$form_state, $order) {
   );
   $form['next_payment']['next_payment_button'] = array(
     '#type' => 'submit',
-    '#value' => 'Change date',
+    '#value' => t('Change date'),
     '#submit' => array('uc_gc_client_next_payment_submit'),
   );
   return $form;
@@ -502,7 +506,7 @@ function uc_gc_client_payments_form($form, &$form_state, $order) {
  */
 function uc_gc_client_payments_form_callback(&$form, &$form_state) {
   $order_id = $form_state['values']['order_id'];
-  $_SESSION['change_ucpid_' . $order_id]['ucpid'] = $form['ucpid']['#value'];
+  $_SESSION['uc_gc_client_change_ucpid_' . $order_id]['ucpid'] = $form['ucpid']['#value'];
   return $form;
 }
 
@@ -511,11 +515,9 @@ function uc_gc_client_payments_form_callback(&$form, &$form_state) {
  */
 function uc_gc_client_adjust_validate($form, &$form_state) {
   if ($form_state['values']['adjustment'] == 0) {
-    form_set_error('adjustment', "Adjustment cannot be set to zero");
+    form_set_error('adjustment', t('Adjustment cannot be set to zero'));
   }
 }
-
-
 
 /**
  * Custom form submit function.
@@ -580,7 +582,6 @@ function uc_gc_client_adjust_submit($form, &$form_state) {
   }
 
   // Add schedules data to database.
-  $_SESSION['adjs'] = array();
   foreach ($dates as $date) {
     $insert = db_insert('uc_gc_client_schedules')
       ->fields(array(
@@ -594,9 +595,7 @@ function uc_gc_client_adjust_submit($form, &$form_state) {
       ))
       ->execute();
 
-    $_SESSION['adjs'][$insert] = $date;
-
-    $insert_dates = db_insert('uc_gc_client_schedules_adjs')
+    db_insert('uc_gc_client_schedules_adjs')
       ->fields(array(
         'sid' => $insert,
         'title' => !empty($form_state['values']['adjust_title']) ? $form_state['values']['adjust_title'] : 'Adjustment',
@@ -619,7 +618,7 @@ function uc_gc_client_adjust_submit($form, &$form_state) {
         ))
         ->execute();
 
-      $plus_insert_dates = db_insert('uc_gc_client_schedules_adjs')
+      db_insert('uc_gc_client_schedules_adjs')
         ->fields(array(
           'sid' => $plus_insert,
           'title' => $form_state['values']['adjust_title'],
@@ -664,7 +663,7 @@ function uc_gc_client_validate_adjs($order, $ucpid, $dates, $mandate, $amount) {
 /**
  * Page callback; confirmation form for scheduled adjustment actions.
  *
- * @param pbject $order
+ * @param object $order
  *   The Ubercart Order object of the scheduled adjustment.
  * @param string $action
  *   The action being performed on the scheduled adjustment, either 'cancel'
@@ -728,7 +727,9 @@ function uc_gc_client_scheduled_action_submit($form, &$form_state) {
       ->execute();
   }
   $action == 'cancel' ? $action = 'cancelled' : $action = 'deleted';
-  drupal_set_message(t('Scheduled adjustment @action.', array('@action' => $action)));
+  drupal_set_message(t('Scheduled adjustment @action.', array(
+    '@action' => $action,
+  )));
   $path = 'admin/store/orders/' . $form_state['values']['ucid'] . '/gocardless';
   drupal_goto($path, array('fragment' => 'adjustments'));
 }
@@ -740,17 +741,19 @@ function uc_gc_client_create_payment_validate($form, &$form_state) {
   $mandate = $form_state['values']['mandate'];
   $amount = $form_state['values']['payment_amount'];
   if ($amount == 0) {
-    form_set_error('payment_amount', 'Please provide an amount');
+    form_set_error('payment_amount', t('Please provide an amount'));
   }
   elseif ($amount < 1) {
-    form_set_error('payment_amount', t('The minimum bill amount for GoCardless id @amount', array('@amount' => uc_currency_format(1))));
+    form_set_error('payment_amount', t('The minimum bill amount for GoCardless id @amount', array(
+      '@amount' => uc_currency_format(1),
+    )));
   }
 
   // Check that specified date is greater than or equal to the
   // next possible charge date.
   if (!is_null($form_state['values']['charge_date'])) {
     if (strtotime($form_state['values']['charge_date']) < strtotime($mandate->next_possible_charge_date)) {
-      form_set_error('charge_date', 'The date cannot be before the Next Possible Charge Date.');
+      form_set_error('charge_date', t('The date cannot be before the Next Possible Charge Date.'));
     }
   }
 }
@@ -780,10 +783,16 @@ function uc_gc_client_create_payment_submit($form, &$form_state) {
   $result = uc_gc_client_api($params);
   $payment = $result->response->body->payments;
 
-  $text = t('A one-off payment for @amount has been created by Admin with GoCardless mandate @mandate.', array('@amount' => uc_currency_format($amount), '@mandate' => $mandate->id));
+  $text = t('A one-off payment for @amount has been created by Admin with GoCardless mandate @mandate.', array(
+    '@amount' => uc_currency_format($amount),
+    '@mandate' => $mandate->id,
+  ));
   drupal_set_message(t('@text', array('@text' => $text)));
   uc_order_comment_save($order->order_id, $order->uid, $text, 'order');
-  $watchdog = t('Order #@order_id:', array('@order_id' => $order->order_id)) . ' ' . $text;
+  //TODO
+  $watchdog = t('Order #@order_id:', array(
+    '@order_id' => $order->order_id,
+  )) . ' ' . $text;
   watchdog('uc_gc_client', $watchdog, array(), WATCHDOG_INFO);
 
   // Provide a hook so that other modules can respond to payment creation.
@@ -832,10 +841,14 @@ function uc_gc_client_cancel_payment_submit($form, &$form_state) {
   );
   $result = uc_gc_client_api($params);
   if ($result->response->status_code == 200) {
-    drupal_set_message(t('Payment @payment_id has been cancelled.', array('@payment_id' => $payment_id)));
+    drupal_set_message(t('Payment @payment_id has been cancelled.', array(
+      '@payment_id' => $payment_id,
+    )));
   }
   else {
-    drupal_set_message(t('There was a problem cancelling payment @payment_id', array('@payment_id' => $payment_id)), 'warning');
+    drupal_set_message(t('There was a problem cancelling payment @payment_id', array(
+      '@payment_id' => $payment_id,
+    )), 'warning');
   }
   $link = 'admin/store/orders/' . $form_state['values']['ucid'] . '/gocardless';
   drupal_goto($link);
@@ -849,7 +862,7 @@ function uc_gc_client_next_payment_submit($form, &$form_state) {
   $ucpid = $form_state['values']['ucpid'];
   $title = $form_state['values']['product_select'][$ucpid];
 
-  $db_update = db_update('uc_gc_client')
+  db_update('uc_gc_client')
     ->fields(array(
       'next_payment' => $next_payment,
     ))
@@ -891,7 +904,9 @@ function uc_gc_client_change_price_submit($form, &$form_state) {
   ));
   drupal_set_message(t('@text', array('@text' => $text)));
   uc_order_comment_save($order->order_id, $order->uid, $text, 'order');
-  $watchdog = t('Order #@order_id:', array('@order_id' => $order->order_id)) . ' ' . $text;
+  $watchdog = t('Order #@order_id:', array(
+    '@order_id' => $order->order_id,
+  )) . ' ' . $text;
   watchdog('uc_gc_client', $watchdog, array(), WATCHDOG_INFO);
 }
 

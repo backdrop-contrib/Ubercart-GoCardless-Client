@@ -66,7 +66,7 @@ function uc_gc_client_menu() {
   $items['admin/store/orders/%uc_order/gocardless'] = array(
     'title' => 'GoCardless',
     'page callback' => 'drupal_get_form',
-    'page arguments' => array('uc_gc_client_payments_form',3),
+    'page arguments' => array('uc_gc_client_payments_form', 3),
     'access arguments' => array('edit orders'),
     'type' => MENU_LOCAL_TASK,
     'weight' => 4,
@@ -74,14 +74,14 @@ function uc_gc_client_menu() {
   );
   $items['admin/store/orders/%uc_order/gocardless/cancel_payment/%'] = array(
     'page callback' => 'drupal_get_form',
-    'page arguments' => array('uc_gc_client_cancel_payment',3,6),
+    'page arguments' => array('uc_gc_client_cancel_payment', 3, 6),
     'access arguments' => array('edit orders'),
     'type' => MENU_CALLBACK,
     'file' => 'uc_gc_client.mandates.inc',
   );
   $items['admin/store/orders/%uc_order/gocardless/scheduled_action/%/%/%'] = array(
     'page callback' => 'drupal_get_form',
-    'page arguments' => array('uc_gc_client_scheduled_action',3,6,7,8),
+    'page arguments' => array('uc_gc_client_scheduled_action', 3, 6, 7, 8),
     'access arguments' => array('edit orders'),
     'type' => MENU_CALLBACK,
     'file' => 'uc_gc_client.mandates.inc',
@@ -342,7 +342,6 @@ function uc_gc_client_form_submit($form, $form_state) {
  * Mandate details are passed on to GoCardless Redirect Flows endpoint.
  */
 function uc_gc_client_mandate_details($order) {
-  global $base_url;
   // Depending on if Optional Checkout Review is selected.
   if (is_array($order)) {
     $order = $order['build_info']['args']['0'];
@@ -422,7 +421,7 @@ function uc_gc_client_start_date() {
       $dates[] = $time;
     }
     sort($dates);
-    return $date = array_shift($dates);
+    return array_shift($dates);
   }
 }
 
@@ -433,7 +432,7 @@ function uc_gc_client_start_date() {
  */
 function uc_gc_client_uc_checkout_complete($order, $account) {
   if (isset($order->data['new_user'])) {
-    $update = db_update('uc_gc_client')
+    db_update('uc_gc_client')
       ->fields(array(
         'uid' => $order->uid,
       ))
@@ -708,7 +707,7 @@ function uc_gc_client_cron() {
 
     // Calculate amount.
     $next_paymentdate = date('D d M Y', $payment->next_payment);
-    $calculate = uc_gc_client_price_calculate($order, $payment->ucpid, $next_paymentdate, $status = 1);
+    $calculate = uc_gc_client_price_calculate($order, $payment->ucpid, $next_paymentdate, 1);
     $amount = $calculate['amount'];
     $currency_code = isset($calculate['currency']) ? $calculate['currency'] : variable_get('uc_currency_code');
     $currency_sign = isset($calculate['sign']) ? $calculate['sign'] : variable_get('uc_currency_sign');
@@ -850,7 +849,7 @@ function uc_gc_client_cron() {
       // Provide a hook so that next_payment can be altered by another module.
       drupal_alter('next_payment', $next_payment, $order);
 
-      $update = db_update('uc_gc_client')
+      db_update('uc_gc_client')
         ->fields(array(
           'next_payment' => $next_payment,
           'updated' => REQUEST_TIME,
@@ -860,10 +859,9 @@ function uc_gc_client_cron() {
     }
 
     // Update status field in uc_gc_client_schedules table.
-    $update = db_update('uc_gc_client_schedules')
+    db_update('uc_gc_client_schedules')
       ->fields(array(
         'status' => 2,
-        // 'status' => 1, // Use for debugging.
       ))
       ->condition('type', 'adjustment')
       ->condition('date', $next_paymentdate)
@@ -896,7 +894,7 @@ function uc_gc_client_price_calculate($order, $ucpid, $next_paymentdate, $status
 
     // Todo Ensure this will not break if 2 adjustments on same date have same
     // title.
-    $calcs_arr['adjs'][$adj->title] = $adj->amount;
+    $calcs_array['adjs'][$adj->title] = $adj->amount;
     $adjs_total = $adjs_total + $adj->amount;
   }
 
@@ -966,16 +964,16 @@ function uc_gc_client_price_calculate($order, $ucpid, $next_paymentdate, $status
         drupal_set_message(t('API key is missing for fixer.io'), 'warning');
       }
 
-      $calcs_arr['currency'] = $currency_arr['currency'];
-      $calcs_arr['sign'] = $currency_arr['sign'];
+      $calcs_array['currency'] = $currency_arr['currency'];
+      $calcs_array['sign'] = $currency_arr['sign'];
     }
   }
-  $calcs_arr['name'] = 'Payment for Order #' . $order->order_id;
-  $calcs_arr['price'] = $product->price;
-  $calcs_arr['adjs_total'] = $adjs_total;
-  $calcs_arr['price_x'] = $price_x;
-  $calcs_arr['amount'] = number_format(check_plain($amount, "number"), 2, '.', '');
-  return $calcs_arr;
+  $calcs_array['name'] = 'Payment for Order #' . $order->order_id;
+  $calcs_array['price'] = $product->price;
+  $calcs_array['adjs_total'] = $adjs_total;
+  $calcs_array['price_x'] = $price_x;
+  $calcs_array['amount'] = number_format(check_plain($amount, "number"), 2, '.', '');
+  return $calcs_array;
 }
 
 /**
@@ -999,6 +997,7 @@ function uc_gc_client_mail($key, &$message, $params) {
       $message['subject'] = t("A payment's Amount was less than @sign1 !", $message_arr);
       $message['body'][] = t("<p>A payment for order <a href='@order_url'>#@order_id</a> has failed because it's amount was less than @sign1.</p>", $message_arr);
       break;
+
     case 'payment-limit-reached':
       $message['subject'] = "The daily payment limit has been exceeded for an order!";
       $message['body'][] = t("<p>A payment of @amount for order <a href='@order_url'>#@order_id</a> could not be raised because the daily automatic limit of @payment_limit has been exceeded.</p>", $message_arr);
@@ -1031,6 +1030,7 @@ function uc_gc_client_uc_order($op, $order, $arg2) {
         uc_gc_client_uc_order_cancel($order);
       }
       break;
+
     case 'delete':
       uc_gc_client_uc_order_delete($order);
       break;
@@ -1085,7 +1085,7 @@ function uc_gc_client_uc_order_cancel($order) {
   }
   elseif ($result->response->status_code == 200) {
     // Update status on database for all products in order.
-    $update = db_update('uc_gc_client')
+    db_update('uc_gc_client')
       ->fields(array(
         'status' => 'canceled',
         'updated' => REQUEST_TIME,
