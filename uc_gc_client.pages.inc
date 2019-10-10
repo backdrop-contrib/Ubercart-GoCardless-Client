@@ -6,7 +6,22 @@
  */
 
 /**
- * Menu callback; complete an order on redirection back from GoCardless.com.
+ * Menu callback; completes an order on redirection back from GoCardless.
+ *
+ * @param string $redirect
+ *   The Redirect ID supplied by GoCardless.
+ * @param string $mandate
+ *   The Mandate ID supplied by GoCardless.
+ * @param string $customer
+ *   The Customer ID supplied by GoCardless.
+ * @param int $order_id
+ *   The Ubercart Order ID.
+ * @param string $payment_method
+ *   The Ubercart Payment method ID.
+ * @param string $start_date
+ *   The start date for the mandate.
+ * @param int $cart_id
+ *   The Ubercart Cart ID for the order.
  */
 function uc_gc_client_redirect($redirect, $mandate, $customer, $order_id, $payment_method, $start_date = NULL, $cart_id = 0) {
   if (intval($_SESSION['cart_order']) != $order_id) {
@@ -298,7 +313,7 @@ function uc_gc_client_hash_equals($known_string, $user_string) {
 }
 
 /**
- * Menu callback; respond to a webhook from GoCardless.com.
+ * Menu callback; respond to a webhook from GoCardless.
  */
 function uc_gc_client_webhook() {
   variable_get('uc_gc_client_sandbox') ? $secret = variable_get('uc_gc_client_webhook_sandbox') : $secret = variable_get('uc_gc_client_webhook_live');
@@ -370,8 +385,15 @@ function uc_gc_client_webhook() {
 
 /**
  * Processes 'mandates' webhooks.
+ *
+ * @param object $order
+ *   The Ubercart Order that the webhook pertains to.
+ * @param string $action
+ *   The action type of GoCardless webhook event.
+ * @param array $event
+ *   The GoCardless webhook event.
  */
-function uc_gc_client_webhook_mandates($order, $action, $event) {
+function uc_gc_client_webhook_mandates($order, $action, array $event) {
   switch ($action) {
 
     case 'submitted':
@@ -449,8 +471,17 @@ function uc_gc_client_webhook_mandates($order, $action, $event) {
 
 /**
  * Processes 'payments' webhooks.
+ *
+ * @param object $order
+ *   The Ubercart Order that the webhook pertains to.
+ * @param string $action
+ *   The action type of GoCardless webhook event.
+ * @param array $event
+ *   The GoCardless webhook event.
+ * @param object $resource
+ *   The GoCardless payment resource that the webhook pertains to.
  */
-function uc_gc_client_webhook_payments($order, $action, $event, $resource) {
+function uc_gc_client_webhook_payments($order, $action, array $event, $resource) {
   $order_id = $order->order_id;
   $amount = $resource->amount / 100;
   $status = db_select('uc_orders', 'o')
@@ -484,6 +515,13 @@ function uc_gc_client_webhook_payments($order, $action, $event, $resource) {
 
 /**
  * Processes 'subscription' webhooks.
+ *
+ * @param object $order
+ *   The Ubercart Order that the webhook pertains to.
+ * @param string $action
+ *   The action type of GoCardless webhook event.
+ * @param array $event
+ *   The GoCardless webhook event.
  */
-function uc_gc_client_webhook_subscriptions($order, $action, $event) {
+function uc_gc_client_webhook_subscriptions($order, $action, array $event) {
 }

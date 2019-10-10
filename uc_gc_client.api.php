@@ -10,8 +10,13 @@
  *
  * Allows modules to alter the mandate details array before it is used to
  * compose the GoCardless Redirect URL.
+ *
+ * @param int $order_id
+ *   The Ubercart order ID for the GoCardless mandate that is being created.
+ * @param array $mandate_details
+ *   The alterable mandate details.
  */
-function hook_mandate_details_alter($order_id, &$mandate_details) {
+function hook_mandate_details_alter($order_id, array &$mandate_details) {
   $mandate_details['user']['first_name'] = 'Rob';
 }
 
@@ -20,8 +25,15 @@ function hook_mandate_details_alter($order_id, &$mandate_details) {
  *
  * Allows modules to alter the paramaters array for new subscriptions or
  * one-off payments before a call is made to the GoCardless API.
+ *
+ * @param array $payment_details
+ *   The alterable payment details.
+ * @param object $order
+ *   The Ubercart order for the subscription or payment.
+ * @param string $type
+ *   The GoCardless API endpoint, either "payment", or "subscription".
  */
-function hook_payment_details_alter(&$payment_details, $order, $type) {
+function hook_payment_details_alter(array &$payment_details, $order, $type) {
   switch ($type) {
     case 'subscription':
       $payment_details['amount'] = $payment_details['amount'] * 2;

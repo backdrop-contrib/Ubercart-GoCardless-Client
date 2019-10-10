@@ -198,7 +198,7 @@ function uc_gc_client_element_info() {
 }
 
 /**
- * Element process hook for address fields.
+ * Element process callback for uc_gc_client_element_info().
  */
 function uc_gc_client_process_address_field($element, $form_state) {
   $uc_countries = db_select('uc_countries', 'u')
@@ -273,16 +273,16 @@ function uc_gc_client_form_uc_cart_checkout_review_form_alter(&$form, &$form_sta
 }
 
 /**
- * Handles form submission when Optional Checkout Review is selected.
+ * Form submission handler.
+ *
+ * Called during checkout only if the Optional Checkout Review config is set.
  */
 function uc_gc_client_checkout_form_submit($form, $form_state) {
   uc_gc_client_form_submit($form, $form_state);
 }
 
 /**
- * Implements hook_form().
- *
- * Returns the elements for the checkout review form.
+ * Form constructor: returns elements for the checkout review form.
  */
 function uc_gc_client_checkout_review_form($form_state, $order) {
   $order_id = $order['build_info']['args']['0']->order_id;
@@ -305,10 +305,10 @@ function uc_gc_client_checkout_review_form($form_state, $order) {
 }
 
 /**
- * Implements hook_form_submit().
+ * Form submission handler for the Checkout Review form.
  *
  * Submit the checkout review form and redirect to Partner site to
- * begin the Direct Debit setup flow.
+ * begin the Redirect Flow.
  */
 function uc_gc_client_form_submit($form, $form_state) {
   if (isset($form_state['values']['mandate_details'])) {
@@ -340,6 +340,13 @@ function uc_gc_client_form_submit($form, $form_state) {
  * Returns an array of mandate details.
  *
  * Mandate details are passed on to GoCardless Redirect Flows endpoint.
+ *
+ * @param object $order
+ *   The Ubercart order that is being completed.
+ *
+ * @return array
+ *   Details for the new mandate to be created by GoCardless in the Redirect
+ *   Flow.
  */
 function uc_gc_client_mandate_details($order) {
   // Depending on if Optional Checkout Review is selected.
@@ -400,17 +407,16 @@ function uc_gc_client_mandate_details($order) {
 /**
  * Returns a start date for new payments.
  *
- * Based on GC settings for and whether a valid start date is specified
- * for a product.
- * For one-off payments this will be used as the charge_date.
- * For subscriptions it will provide the start_date.
+ * Based on GC settings for and whether a valid start date is specified for a
+ * product. For one-off payments this will be used as the charge_date. For
+ * subscriptions it will provide the start_date.
+ *
+ * @return string
+ *   The start date.
  */
 function uc_gc_client_start_date() {
   $doms = variable_get('uc_gc_client_dom');
-  if (empty($doms)) {
-    return;
-  }
-  else {
+  if (!empty($doms)) {
     // Create a sequential array of available dates and return the soonest.
     $est_charge_date = uc_gc_client_working_days_calculate('+', 4, date('Y-m-d'));
     $doms = explode(', ', $doms);
@@ -444,7 +450,7 @@ function uc_gc_client_uc_checkout_complete($order, $account) {
 /**
  * Implements hook_uc_add_to_cart_data().
  *
- *  Adds extra information to a cart item's "data" array.
+ * Adds extra information to a cart item's "data" array.
  */
 function uc_gc_client_uc_add_to_cart_data($form_values) {
   $nid = $form_values['nid'];
@@ -576,7 +582,17 @@ function uc_gc_client_uc_order_pane() {
 }
 
 /**
- * Provides the "GoCardless" pane in an order's admin view pane.
+ * Callback for uc_gc_client_uc_order_pane().
+ *
+ * Provides the "GoCardless" pane in an order's admin view.
+ *
+ * @param string $op
+ *   The order view.
+ * @param object $order
+ *   The Ubercart order being viewed.
+ *
+ * @return array
+ *   Form elements to be added to the order view.
  */
 function uc_gc_client_uc_order_pane_callback($op, $order) {
   switch ($op) {
@@ -616,42 +632,55 @@ function uc_gc_client_uc_order_pane_callback($op, $order) {
 }
 
 /**
- * Handles the "Cancel button" order pane.
+ * Callback for uc_gc_client_uc_order_pane().
+ *
+ * Provides the "Cancel button" pane in an order's customer view.
+ *
+ * @param string $op
+ *   The order view.
+ * @param object $order
+ *   The Ubercart order being viewed.
+ *
+ * @return array
+ *   Form elements to be added to the order view.
  */
-function uc_gc_client_pane_cancel_button($op, $order, &$form = NULL, &$form_state = NULL) {
+function uc_gc_client_pane_cancel_button($op, $order) {
   switch ($op) {
     case 'customer':
       if (user_access('view own invoices')) {
         return drupal_get_form('uc_gc_client_pane_cancel_form', $order);
       }
-      // Case 'view':
-      // if (user_access('view own invoices')) {
-      // return drupal_get_form('uc_gc_client_pane_cancel_form', $order);
-      // }.
   }
 }
 
 /**
- * Adds a form with a cancel button.
+ * Form constructor for the GoCardless Mandate Cancel form.
+ *
+ * Provides a form with a button for cancelling a GoCardless mandate. Displayed
+ * in a pane in an order's "customer" view.
+ *
+ * @param object $order
+ *   The Ubercart order for which the mandate is being cancelled.
  */
 function uc_gc_client_pane_cancel_form($form, &$form_state, $order) {
   if ($order->order_status <> 'canceled') {
     $form['order'] = array(
       '#value' => $order,
     );
+    $confirm = t('Are you sure you want to cancel the direct debit mandate? This action cannot be undone.');
     $form['submit'] = array(
       '#type' => 'submit',
       '#value' => t('Cancel GoCardless mandate'),
-      '#attributes' => array('onclick' => 'if (!confirm("Are you sure you want to cancel the direct debit mandate? This action cannot be undone.")) {return FALSE;}'),
+      '#attributes' => array('onclick' => 'if (!confirm("' . $confirm . '")) {return false;}'),
     );
     return $form;
   }
 }
 
 /**
- * Implements hook_form_submit().
+ * Form submission handler.
  *
- * Submit function for the cancel button form.
+ * @see uc_gc_client_pane_cancel_form()
  */
 function uc_gc_client_pane_cancel_form_submit($form, &$form_state) {
   $order = $form['order']['#value'];
@@ -661,8 +690,7 @@ function uc_gc_client_pane_cancel_form_submit($form, &$form_state) {
 /**
  * Implements hook_cron().
  *
- * If next_payment date is in the past create a new payment and
- * update next_payment.
+ * Handles payment creation scheduling.
  */
 function uc_gc_client_cron() {
   // Postpone the operation if there is already an instance of
@@ -872,9 +900,24 @@ function uc_gc_client_cron() {
 }
 
 /**
- * Returns the price of an order modified by the multiplier and other factors.
+ * Prepares data required for creating a payment with the GoCardless API.
+ *
+ * @param object $order
+ *   The Ubercart order that the payment is being created for.
+ * @param int $ucpid
+ *   The ID of the Ubercart order product that the payment is being created for.
+ * @param int $next_paymentdate
+ *   Unix timestamp: the next scheduled payment time for the order product.
+ * @param bool|null $status
+ *   One if the function is being called by cron, else NULL.
+ * @param array $data
+ *   (optional) Data for the payment being created.
+ *
+ * @return array
+ *   Data including the price of an order modified by the multiplier and other
+ *   factors.
  */
-function uc_gc_client_price_calculate($order, $ucpid, $next_paymentdate, $status, $data = FALSE) {
+function uc_gc_client_price_calculate($order, $ucpid, $next_paymentdate, $status, array $data = FALSE) {
   // Process scheduled adjustments.
   $query = db_select('uc_gc_client_schedules', 's');
   $query->join('uc_gc_client_schedules_adjs', 'a', 'a.sid = s.sid');
@@ -891,7 +934,6 @@ function uc_gc_client_price_calculate($order, $ucpid, $next_paymentdate, $status
   $calcs_array = array();
   $adjs_total = 0;
   foreach ($adjustments as $adj) {
-
     // Todo Ensure this will not break if 2 adjustments on same date have same
     // title.
     $calcs_array['adjs'][$adj->title] = $adj->amount;
@@ -933,7 +975,6 @@ function uc_gc_client_price_calculate($order, $ucpid, $next_paymentdate, $status
     $currency_arr = uc_gc_client_currency($country_code);
 
     if ($default_currency != $currency_arr['currency']) {
-
       // Use fixer.io to provide latest exchange rates for currency conversion.
       if ($fixer = variable_get('uc_gc_client_fixer', NULL)) {
         $uri = 'http://data.fixer.io/api/latest?access_key=' . $fixer . '&symbols=' . $default_currency;
@@ -1039,6 +1080,9 @@ function uc_gc_client_uc_order($op, $order, $arg2) {
 
 /**
  * Removes records from the database upon deletion of an order.
+ *
+ * @param object $order
+ *   The Ubercart order being deleted.
  */
 function uc_gc_client_uc_order_delete($order) {
   // Cancel GoCardless mandate first if order status is not canceled.
@@ -1061,6 +1105,9 @@ function uc_gc_client_uc_order_delete($order) {
 
 /**
  * Cancels a GC mandate upon cancelling an order.
+ *
+ * @param object $order
+ *   The Ubercart order being cancelled.
  */
 function uc_gc_client_uc_order_cancel($order) {
   $gc_client = db_select('uc_gc_client', 'c')
@@ -1101,6 +1148,12 @@ function uc_gc_client_uc_order_cancel($order) {
 
 /**
  * Get the Ubercart order ID from database using mandate ID from GoCardless.
+ *
+ * @param string $gcid
+ *   A GoCardless mandate ID.
+ *
+ * @return int
+ *   The Ubercart order ID that the mandate is associated with.
  */
 function uc_gc_client_id($gcid) {
   $order_id = db_query("SELECT ucid FROM {uc_gc_client} where gcid = :gc_order_id", array(':gc_order_id' => $gcid))->fetchField();
@@ -1110,9 +1163,18 @@ function uc_gc_client_id($gcid) {
 /**
  * Returns a date calculated as working days from the date provided.
  *
- * @Todo
- * This function will malfunction if there is a bank holiday(s) within the
- * specified range of days
+ * @todo This function will malfunction if there is a bank holiday(s) within
+ *  the specified range of days.
+ *
+ * @param string $op
+ *   Plus or minus determining if calculating a forwards or backwards date.
+ * @param int $days
+ *   The number of days to calculate.
+ * @param string $date
+ *   The date to calculate from.
+ *
+ * @return string
+ *   The calculated date.
  */
 function uc_gc_client_working_days_calculate($op, $days, $date) {
   $x = 1;
@@ -1127,6 +1189,8 @@ function uc_gc_client_working_days_calculate($op, $days, $date) {
 }
 
 /**
+ * Form element validate callback function.
+ *
  * Validates a form entry as a positive number.
  */
 function uc_gc_client_element_validate_positive_number($element, &$form_state) {
@@ -1188,6 +1252,9 @@ function uc_gc_client_currency_format($value, $country_code, $thou = NULL, $dec 
  * Https://www.iban.com/currency-codes for currency codes.
  * https://www.nationsonline.org/oneworld/country_code_list.htm for country
  * codes.
+ *
+ * @return array
+ *   The country definitions.
  */
 function uc_gc_client_countries_define() {
   $countries = array(

@@ -414,3 +414,10 @@ function uc_gc_client_update_7005() {
   );
   variable_set('uc_gc_client_countries', array_merge($countries, $countries_new));
 }
+
+/**
+ * Clear cache to register updated menu items.
+ */
+function uc_gc_client_update_7006() {
+  cache_clear_all();
+}

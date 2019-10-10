@@ -6,7 +6,9 @@
  */
 
 /**
- * Implements hook_form().
+ * Form constructor for the Order Price Shift tool.
+ *
+ * Provides a tool for bulk changing the price of purchased products.
  */
 function uc_gc_client_priceshift_form($form, $form_state) {
   $sandbox = variable_get('uc_gc_client_sandbox');
@@ -140,7 +142,7 @@ function uc_gc_client_priceshift_form($form, $form_state) {
 }
 
 /**
- * Implements hook_form_validate().
+ * Form validation handler for uc_gc_client_priceshift_form().
  */
 function uc_gc_client_priceshift_form_validate($form, $form_state) {
   if (empty($form_state['values']['operator'])) {
@@ -149,7 +151,7 @@ function uc_gc_client_priceshift_form_validate($form, $form_state) {
 }
 
 /**
- * Form submission for uc_gc_client_priceshift_form().
+ * Form submission handler for uc_gc_client_priceshift_form().
  */
 function uc_gc_client_priceshift_form_submit($form, $form_state) {
   $operator = $form_state['values']['operator'];
@@ -177,6 +179,17 @@ function uc_gc_client_priceshift_form_submit($form, $form_state) {
 
 /**
  * Execute price shift for the given order product.
+ *
+ * @param object $order
+ *   The Ubercart order of the purchased product that's being updated.
+ * @param int $ucpid
+ *   The ID of the purchased order product.
+ * @param int $cost_adj
+ *   The amount of the product cost adjustment.
+ * @param int $price_adj
+ *   The amount of the product price adjustment.
+ * @param string $product_title
+ *   The title of the product.
  */
 function uc_gc_client_priceshift_execute($order, $ucpid, $cost_adj, $price_adj, $product_title = FALSE) {
   $product = $order->products[$ucpid];
@@ -186,7 +199,6 @@ function uc_gc_client_priceshift_execute($order, $ucpid, $cost_adj, $price_adj, 
     $product->cost += $cost_adj;
     $product->price += $price_adj;
     uc_order_save($order);
-
     $message_array = array(
       '@order_id' => $order->order_id,
       '@product' => $product->title,

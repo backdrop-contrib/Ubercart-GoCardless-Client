@@ -37,8 +37,15 @@ function uc_gc_client_get() {
 
 /**
  * Handles API posts to GC Partner site, and optionally logs results.
+ *
+ * @param array $params
+ *   Array of data to be posted to the GoCardless API.
+ *
+ * @return mixed
+ *   The API call result as an object, or a string containing the error code
+ *   if the API call failed, or authentication failed.
  */
-function uc_gc_client_api($params) {
+function uc_gc_client_api(array $params) {
   $auth = uc_gc_client_authenticate();
   if ($auth == 200) {
     $result = uc_gc_client_post($params);
@@ -75,6 +82,10 @@ function uc_gc_client_api($params) {
 
 /**
  * Handles Sevices module session authentication with GC Partner site.
+ *
+ * @return int
+ *   200 if already logged in to Partner site, or else the resulting code from
+ *   authentication attempt.
  */
 function uc_gc_client_authenticate() {
   // unset($_SESSION['uc_gc_client_cookie_created']);.
@@ -121,14 +132,21 @@ function uc_gc_client_authenticate() {
   }
   else {
     // Already logged in.
-    return $result = 200;
+    return 200;
   }
 }
 
 /**
  * Handles HTTP requests to GC Partner site.
+ *
+ * @param array $data
+ *   The parameters to post to the GoCardless API.
+ *
+ * @return object
+ *   The data element of the response if the API call was successful, or the
+ *   entire response if the call failed.
  */
-function uc_gc_client_post($data) {
+function uc_gc_client_post(array $data) {
   $options['headers'] = array(
     'Content-Type' => 'application/json',
     'Cookie' => $_SESSION['uc_gc_client_cookie'],
@@ -161,8 +179,8 @@ function uc_gc_client_connect() {
     $_POST['environ'] == 'SANDBOX' ? $ext = '_sandbox' : $ext = '_live';
   }
 
-  //Check that the returned password matches the saved one before
-  //proceeding, and return error 403 Forbidden if it does not.
+  // Check that the returned password matches the saved one before
+  // proceeding, and return error 403 Forbidden if it does not.
   if (isset($ext) && isset($_POST['pass']) && $_POST['pass'] == variable_get('uc_gc_client_user_pass' . $ext)) {
     if (isset($_POST['id']) && isset($_POST['environ'])) {
       variable_set('uc_gc_client_org_id' . $ext, $_POST['id']);

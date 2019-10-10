@@ -6,7 +6,10 @@
  */
 
 /**
- * Displays the GoCardless Payments edit screen .
+ * Form constructor for the GoCardless Mandate form.
+ *
+ * @param object $order
+ *   An Ubercart order.
  */
 function uc_gc_client_payments_form($form, &$form_state, $order) {
   $gcs = db_select('uc_gc_client', 'g')
@@ -374,7 +377,13 @@ function uc_gc_client_payments_form($form, &$form_state, $order) {
       '#collapsible' => TRUE,
       '#collapsed' => TRUE,
     );
-    $adj_headers = array(t('Title'), t('Adjustment'), t('Date'), t('Status'), t('Actions'));
+    $adj_headers = array(
+      t('Title'),
+      t('Adjustment'),
+      t('Date'),
+      t('Status'),
+      t('Actions'),
+    );
     // Adjustments tables.
     $form['adjust']['adjust_table']['table'] = array(
       '#theme' => 'table',
@@ -511,7 +520,7 @@ function uc_gc_client_payments_form_callback(&$form, &$form_state) {
 }
 
 /**
- * Custom form validate function.
+ * Form validation handler for Scheduled Adustments.
  */
 function uc_gc_client_adjust_validate($form, &$form_state) {
   if ($form_state['values']['adjustment'] == 0) {
@@ -520,10 +529,9 @@ function uc_gc_client_adjust_validate($form, &$form_state) {
 }
 
 /**
- * Custom form submit function.
+ * Form submission handler for Scheduled Adustments.
  */
 function uc_gc_client_adjust_submit($form, &$form_state) {
-  $mandate = $form_state['values']['mandate'];
   $ucpid = $form_state['values']['ucpid'];
   $order_id = $form_state['values']['order_id'];
   $order = uc_order_load($order_id);
@@ -558,7 +566,7 @@ function uc_gc_client_adjust_submit($form, &$form_state) {
   // are not <= 0 and are not > amount remaining.
   $form_state['values']['operator'] == 'add' ? $amount = $form_state['values']['adjustment'] : $amount = 0 - $form_state['values']['adjustment'];
 
-  $warning = uc_gc_client_validate_adjs($order, $ucpid, $dates, $mandate, $amount);
+  $warning = uc_gc_client_validate_adjs($order, $ucpid, $dates, $amount);
   if ($warning) {
     return;
   }
@@ -575,7 +583,7 @@ function uc_gc_client_adjust_submit($form, &$form_state) {
 
     // Validate plus_adjustment.
     $form_state['values']['plus_operator'] == 'add' ? $plus_amount = $form_state['values']['plus_adjustment'] : $plus_amount = 0 - $form_state['values']['plus_adjustment'];
-    $plus_warning = uc_gc_client_validate_adjs($order, $ucpid, $plus_dates, $mandate, $plus_amount);
+    $plus_warning = uc_gc_client_validate_adjs($order, $ucpid, $plus_dates, $plus_amount);
     if ($plus_warning) {
       return;
     }
@@ -631,9 +639,27 @@ function uc_gc_client_adjust_submit($form, &$form_state) {
 }
 
 /**
- * Custom validation function: checks integrity of scheduled adjustments.
+ * Checks validity of scheduled adjustments.
+ *
+ * Checks against existing scheduled adjustments, and any alterations from
+ * other modules to determine if the price is greated than 1 and not zero.
+ *
+ * @param object $order
+ *   The Ubercart order that the scheduled adjustment is being created under.
+ * @param int $ucpid
+ *   The Ubercart product ID that the scheduled adjustment is for.
+ * @param array $dates
+ *   One or more payment creation dates, as strings, that the adjustment will
+ *   be applied to.
+ * @param float $amount
+ *   The amount of the adjustment.
+ *
+ * @return bool
+ *   Returns TRUE if the scheduled adjustment is invalid.
+ *
+ * @see uc_gc_client_adjust_submit()
  */
-function uc_gc_client_validate_adjs($order, $ucpid, $dates, $mandate, $amount) {
+function uc_gc_client_validate_adjs($order, $ucpid, array $dates, $amount) {
   foreach ($dates as $date) {
     // Calculate sum of scheduled adjs for date.
     $db_query = "SELECT s.ucid, s.date, sum( a.amount ) AS sum FROM {uc_gc_client_schedules} s inner join {uc_gc_client_schedules_adjs} a on s.sid = a.sid WHERE s.status = 1 AND s.date = '" . $date . "' AND s.ucpid = " . $order->order_id;
@@ -735,7 +761,7 @@ function uc_gc_client_scheduled_action_submit($form, &$form_state) {
 }
 
 /**
- * Custom form validate function.
+ * Form validation handler for Create Payment.
  */
 function uc_gc_client_create_payment_validate($form, &$form_state) {
   $mandate = $form_state['values']['mandate'];
@@ -759,7 +785,7 @@ function uc_gc_client_create_payment_validate($form, &$form_state) {
 }
 
 /**
- * Custom form submit function.
+ * Form submission handler for Create Payment.
  */
 function uc_gc_client_create_payment_submit($form, &$form_state) {
   $mandate = $form_state['values']['mandate'];
@@ -789,7 +815,7 @@ function uc_gc_client_create_payment_submit($form, &$form_state) {
   ));
   drupal_set_message(t('@text', array('@text' => $text)));
   uc_order_comment_save($order->order_id, $order->uid, $text, 'order');
-  //TODO
+  // TODO.
   $watchdog = t('Order #@order_id:', array(
     '@order_id' => $order->order_id,
   )) . ' ' . $text;
@@ -855,7 +881,7 @@ function uc_gc_client_cancel_payment_submit($form, &$form_state) {
 }
 
 /**
- * Custom form submit function.
+ * Form submission handler for Next Payment.
  */
 function uc_gc_client_next_payment_submit($form, &$form_state) {
   $next_payment = strtotime($form_state['values']['next_payment']);
@@ -876,7 +902,7 @@ function uc_gc_client_next_payment_submit($form, &$form_state) {
 }
 
 /**
- * Custom form submit function.
+ * Form submission handler for Change Price.
  */
 function uc_gc_client_change_price_submit($form, &$form_state) {
   $cost = $form_state['values']['cost'];

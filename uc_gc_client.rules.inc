@@ -35,6 +35,9 @@ function uc_gc_client_rules_event_info() {
 
 /**
  * Action implementation: cancels a subscription on GoCardless.com.
+ *
+ * @param object $order
+ *   The Ubercart Order that the cancelled GoCardless subscription pertains to.
  */
 function uc_gc_client_action_cancel($order) {
   if (isset($order->order_id)) {

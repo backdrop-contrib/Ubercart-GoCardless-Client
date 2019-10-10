@@ -40,7 +40,7 @@ function uc_gc_client_uc_payment_method_callback($op, &$order, $form = NULL, &$f
       );
       $form['connect']['uc_gc_client_sandbox'] = array(
         '#type' => 'checkbox',
-        '#title' => '<b>' .  t('Enable Sandbox') . '</b>',
+        '#title' => '<b>' . t('Enable Sandbox') . '</b>',
         '#description' => t('Sandbox: GoCardless will operate in a test environment, and no real banking activity will occur.'),
         '#default_value' => $sandbox,
         '#ajax' => array(
@@ -52,7 +52,7 @@ function uc_gc_client_uc_payment_method_callback($op, &$order, $form = NULL, &$f
 
       $markup = '<br /><p><b>' . t('Connect / disconnect with GoCardless') . '</b></p>';
       if (!$connected) {
-        $markup .= '<p>' . t('After clicking \'Connect\' you will be redirected to the GoCardless where you can create an account and connect your site as a client of Seamless-CMS.co.uk') . '</p>';
+        $markup .= '<p>' . t("After clicking 'Connect' you will be redirected to the GoCardless where you can create an account and connect your site as a client of Seamless-CMS.co.uk") . '</p>';
         $form['connect']['markup'] = array(
           '#markup' => $markup,
         );
@@ -72,11 +72,12 @@ function uc_gc_client_uc_payment_method_callback($op, &$order, $form = NULL, &$f
           '#type' => 'value',
           '#value' => $ext,
         );
+        $confirm = t('Are you sure you want to disconnect your site from GoCardless?');
         $form['connect']['disconnect'] = array(
           '#type' => 'submit',
           '#value' => $sandbox ? t('Disconnect SANDBOX') : t('Disconnect LIVE'),
           '#submit' => array('uc_gc_client_disconnect_submit'),
-          '#attributes' => array('onclick' => 'if (!confirm("' . t('Are you sure you want to disconnect your site from GoCardless?') . '")) {return false;}'),
+          '#attributes' => array('onclick' => 'if (!confirm("' . $confirm . '")) {return false;}'),
         );
       }
 
@@ -175,11 +176,11 @@ function uc_gc_client_uc_payment_method_callback($op, &$order, $form = NULL, &$f
         '#collapsed' => FALSE,
       );
       $form['checkout']['uc_gc_client_optional_checkout_review'] = array(
-        '#title' => '<b>' .  t('Optional Checkout Review page') . '</b>',
+        '#title' => '<b>' . t('Optional Checkout Review page') . '</b>',
         '#type' => 'checkbox',
         '#default_value' => variable_get('uc_gc_client_optional_checkout_review'),
         '#required' => FALSE,
-        '#description' => t('Check this to emit the Checkout Review page.') . '<br />' . t('Don\'t use this if you have the Ubercart Optional Checkout Review module installed, or you are using other payment methods in addition to GoCardless Client.'),
+        '#description' => t('Check this to emit the Checkout Review page.') . '<br />' . t("Don't use this if you have the Ubercart Optional Checkout Review module installed, or you are using other payment methods in addition to GoCardless Client."),
       );
       $form['checkout']['uc_gc_client_checkout_label'] = array(
         '#type' => 'textfield',
@@ -225,9 +226,9 @@ function uc_gc_client_uc_payment_method_callback($op, &$order, $form = NULL, &$f
         if ($_GET['status'] == 'connected') {
           drupal_set_message(t('You have connected successfully with GoCardless'));
         }
-        //$_GET['status'] will be "failed" if the wrong password was provided
-        //when receiving the authentication credentials from the partner site
-        //during the connection process. See uc_gc_client_connect().
+        // $_GET['status'] will be "failed" if the wrong password was provided
+        // when receiving the authentication credentials from the partner site
+        // during the connection process. See uc_gc_client_connect().
         elseif ($_GET['status'] == 'failed') {
           drupal_set_message(t('Connection with GoCardless has failed'), 'error');
         }
@@ -415,7 +416,7 @@ function uc_gc_client_form_node_form_alter(&$form, $form_state, $form_id) {
       '#date_year_range' => '0:+1',
       '#default_value' => !is_null($defaults['start_date']) ? date('Y-m-d', $defaults['start_date']) : NULL,
       '#weight' => 5,
-      '#description' => t('Specify a start date for the customer\'s new mandate. If this is enabled then the start date provided will override any other start date settings.'),
+      '#description' => t("Specify a start date for the customer's new mandate. If this is enabled then the start date provided will override any other start date settings."),
       '#states' => array(
         'visible' => array(
           ':input[name="raise_payment"]' => array('checked' => FALSE),
@@ -582,7 +583,7 @@ function uc_gc_client_countries_form($form, &$form_state) {
   }
   $form = array();
   $form['markup'] = array(
-    '#markup' => '<p>' .  t('Countries should first be enabled in Ubercart before they can be enabled / disabled here.') . '</p>',
+    '#markup' => '<p>' . t('Countries should first be enabled in Ubercart before they can be enabled / disabled here.') . '</p>',
   );
   $header = array('Country', 'Direct debit scheme', 'Currency');
   $form['countries'] = array(
