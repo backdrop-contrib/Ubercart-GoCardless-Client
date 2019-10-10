@@ -917,7 +917,7 @@ function uc_gc_client_cron() {
  *   Data including the price of an order modified by the multiplier and other
  *   factors.
  */
-function uc_gc_client_price_calculate($order, $ucpid, $next_paymentdate, $status, array $data = FALSE) {
+function uc_gc_client_price_calculate($order, $ucpid, $next_paymentdate, $status, array $data = array()) {
   // Process scheduled adjustments.
   $query = db_select('uc_gc_client_schedules', 's');
   $query->join('uc_gc_client_schedules_adjs', 'a', 'a.sid = s.sid');
