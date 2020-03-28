@@ -42,6 +42,24 @@ function hook_payment_details_alter(array &$payment_details, $order, $type) {
 }
 
 /**
+ * Allows you to respond to payment creations.
+ *
+ * @param object $payment
+ *   Object returned by GoCardless from the payment creation.
+ * @param int $order_id
+ *   The Ubercart order Id.
+ * @param string $op
+ *   The operation that invoked the hook, either 'checkout', 'scheduled', or
+ *   'manual'.
+ */
+function hook_payment_created($payment, $order_id, $op) {
+
+  drupal_set_message(t("The payment's status is @status", array(
+    '@status' => $payment->status,
+  )));
+}
+
+/**
  * Alters values before validating a scheduled adjustment.
  *
  * Allows the sheduled adjustment amount, or the order's amount to be altered

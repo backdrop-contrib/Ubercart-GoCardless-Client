@@ -215,7 +215,7 @@ function uc_gc_client_redirect($redirect, $mandate, $customer, $order_id, $payme
 
           // Provide a hook so that other modules can respond to payment
           // creation.
-          module_invoke_all('payment_created', $payment, $order_id);
+          module_invoke_all('payment_created', $payment, $order_id, 'checkout');
         }
         else {
           drupal_set_message(t('An initial payment could not be created because authentication failed. We will try and raise it again later.'), 'error');

@@ -233,9 +233,9 @@ function uc_gc_client_uc_payment_method_callback($op, &$order, $form = NULL, &$f
           drupal_set_message(t('Connection with GoCardless has failed'), 'error');
         }
       }
-      else {
-        drupal_set_message(t('Connection with GoCardless has failed'), 'error');
-      }
+      //else {
+      //  drupal_set_message(t('Connection with GoCardless has failed'), 'error');
+      //}
 
       $form['#submit'][] = 'uc_gc_client_admin_validate';
       return $form;

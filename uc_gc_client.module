@@ -742,7 +742,6 @@ function uc_gc_client_cron() {
 
     // Make sure daily payment limit hasn't been exceeded.
     if (!empty($payment_limit) && $payment_limit != 0) {
-
       $params = array(
         'endpoint' => 'payments',
         'action' => 'list',
@@ -759,9 +758,7 @@ function uc_gc_client_cron() {
           }
         }
       }
-
       if ($count >= $payment_limit) {
-
         $message = t("Payment for @amount has not been created because the daily payment limit of @payment_limit has been exceeded for the order.", array(
           '@amount' => uc_currency_format($amount, $currency_sign),
           '@payment_limit' => $payment_limit,
@@ -783,7 +780,6 @@ function uc_gc_client_cron() {
           'amount' => uc_currency_format($amount, $currency_sign),
         );
         drupal_mail('uc_gc_client', 'payment-limit-reached', $to_customer, language_default(), $params);
-
         continue;
       }
     }
@@ -793,7 +789,6 @@ function uc_gc_client_cron() {
       'name' => $calculate['name'],
       'metadata' => ['ucpid' => $payment->ucpid],
     );
-
     // Invoke hook_payment_details_alter so that payment details can be
     // altered by another module.
     $type = 'scheduled';
@@ -865,7 +860,7 @@ function uc_gc_client_cron() {
       ), WATCHDOG_INFO);
 
       // Provide a hook so that other modules can respond to payment creation.
-      module_invoke_all('payment_created', $payment_created, $order->order_id);
+      module_invoke_all('payment_created', $payment_created, $order->order_id, 'scheduled');
     }
 
     // Update next_payment field in uc_gc_client table.
@@ -951,19 +946,29 @@ function uc_gc_client_price_calculate($order, $ucpid, $next_paymentdate, $status
 
   // Process line items.
   $line_items = 0;
-
-  // If there is just one product in the order we can safely add the total of
-  // the line items to the amount.
-  if ($order->product_count == 1) {
-    foreach ($order->line_items as $item) {
-      if ($item['type'] == 'subtotal') {
-        continue;
-      }
-      $line_items = $line_items + $item['amount'];
+  foreach ($order->line_items as $item) {
+    if ($item['type'] == 'subtotal') {
+      continue;
     }
+    // If the line item is a "coupon" and had GoCardless data appended to it.
+    elseif ($item['type'] == 'coupon' && isset($item['data']['gocardless'])) {
+      // If the line item is GoCardless associated with the order product for
+      // which the payment is being created.
+      if ($item['data']['gocardless']['nid'] == $product->nid) {
+        $calcs_array['coupons'][$item['data']['code']] = $item['amount'];
+        $line_items += $item['amount'];
+      } 
+    }
+    // Since we do not know what this line item is, and which order product
+    // it belongs to, it is only safe to add it if there is only one product
+    // in the order.
+    elseif ($order->product_count == 1) {
+      $line_items += $item['amount'];
+    }
+    // TODO extra code for handling unknown line items when there is more than
+    // one product in the order.
   }
 
-  // Todo add extra rules here for handling line item amounts.
   $data ? $amount = $data['amount'] : $amount = $product->price;
   $amount = ($amount + $adjs_total + $line_items) * $price_x;
 

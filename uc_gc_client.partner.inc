@@ -88,7 +88,7 @@ function uc_gc_client_api(array $params) {
  *   authentication attempt.
  */
 function uc_gc_client_authenticate() {
-  // unset($_SESSION['uc_gc_client_cookie_created']);.
+  //unset($_SESSION['uc_gc_client_cookie_created']);
   if (isset($_SESSION['uc_gc_client_cookie_created']) && $_SESSION['uc_gc_client_cookie_created'] < REQUEST_TIME - 1800) {
     unset($_SESSION['uc_gc_client_cookie']);
     unset($_SESSION['uc_gc_client_cookie_created']);
@@ -111,6 +111,7 @@ function uc_gc_client_authenticate() {
       'data' => $data,
     );
     $result = drupal_http_request($url, $options);
+    dpm($result);
     $result_data = json_decode($result->data);
 
     if ($result->code == 200) {

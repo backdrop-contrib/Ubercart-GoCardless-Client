@@ -822,7 +822,7 @@ function uc_gc_client_create_payment_submit($form, &$form_state) {
   watchdog('uc_gc_client', $watchdog, array(), WATCHDOG_INFO);
 
   // Provide a hook so that other modules can respond to payment creation.
-  module_invoke_all('payment_created', $payment, $order->order_id);
+  module_invoke_all('payment_created', $payment, $order->order_id, 'manual');
 }
 
 /**
