@@ -97,6 +97,38 @@ function uc_gc_client_uc_payment_method_callback($op, &$order, $form = NULL, &$f
         '#field_prefix' => $webhook_prefix,
       );
 
+      // GoCardless account verification status and onboarding link.
+      if ($connected) {
+        $params = array(
+          'endpoint' => 'creditors',
+          'action' => 'list',
+        );
+        $result = uc_gc_client_api($params);
+        if ($result && $result->response->status_code == 200) {
+          $creditors = $result->response->body->creditors;
+          if (!empty($creditors)) {
+            $creditor = array_shift($creditors);
+            if ($creditor->verification_status == 'successful') {
+              $verified_markup = '<div class="messages status">' . t('Your GoCardless account is verified.') .  '</div>';
+            }
+            else {
+              $verification_status = $creditor->verification_status == 'in_review'? 'In review' : 'Action required';
+              $client_url = url(current_path(), array('absolute' => TRUE));
+              $partner_url = variable_get('uc_gc_client_partner_url');
+              $onboarding_ext = $sandbox ? 'sandbox' : 'live';
+              $onboarding_url = $partner_url . '/gc_partner/onboarding_direct?env=' . $onboarding_ext . '&client_url=' . $client_url;
+              $verified_markup = '<div class="messages warning">' . t("Your GoCardless account verification status is '@verification_status'. <a href='@onboarding_url'>Click here</a> to complete GoCardless onboarding and get verified.", array(
+                '@onboarding_url' => $onboarding_url,
+                '@verification_status' => $verification_status,
+              )) .  '</div>';
+            }
+            $form['connect']['verified'] = array(
+              '#markup' => $verified_markup,
+            );
+          }
+        }
+      }
+
       // Global.
       $form['global'] = array(
         '#type' => 'fieldset',

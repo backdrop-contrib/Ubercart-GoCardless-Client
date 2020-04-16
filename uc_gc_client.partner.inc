@@ -111,7 +111,6 @@ function uc_gc_client_authenticate() {
       'data' => $data,
     );
     $result = drupal_http_request($url, $options);
-    dpm($result);
     $result_data = json_decode($result->data);
 
     if ($result->code == 200) {
