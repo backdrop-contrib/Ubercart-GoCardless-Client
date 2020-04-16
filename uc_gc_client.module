@@ -875,7 +875,7 @@ function uc_gc_client_cron() {
         if (!isset($result->response) || !$result->response || $result->response->status_code == 500) {
           db_update('uc_gc_client')->fields([
             'next_payment_uuid' => $uuid,
-          ])->condition('ucid', $payment->ucid)->execute();
+          ])->condition('ucpid', $payment->ucpid)->execute();
         }
         $log = t('There was a problem creating a scheduled payment for order #@order_id.', [
           '@order_id' => $order->order_id,
