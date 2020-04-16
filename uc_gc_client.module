@@ -704,7 +704,7 @@ function uc_gc_client_cron() {
 
   // Get list of active orders where next_payment is in the past.
   $payments = db_select('uc_gc_client', 'g')
-    ->fields('g', array('ucid', 'ucpid', 'gcid', 'uid', 'next_payment'))
+    ->fields('g', array('ucid', 'ucpid', 'gcid', 'uid', 'next_payment', 'next_payment_uuid'))
     ->condition('type', 'S', '!=')
     ->condition('status', 'canceled', '!=')
     ->condition('next_payment', REQUEST_TIME, '<=')
@@ -714,7 +714,6 @@ function uc_gc_client_cron() {
   $payment_limit = variable_get('uc_gc_client_payment_limit', 0);
 
   foreach ($payments as $payment) {
-
     // Check status of the mandate, do not create payment if it is cancelled.
     $order = uc_order_load($payment->ucid);
     $params = array(
@@ -833,6 +832,9 @@ function uc_gc_client_cron() {
 
     else {
       // Create the payment.
+      if (!$uuid = $payment->next_payment_uuid) {
+        $uuid = uc_gc_client_uuid_generate();
+      }
       $params = array(
         'endpoint' => 'payments',
         'action' => 'create',
@@ -841,28 +843,48 @@ function uc_gc_client_cron() {
         'currency' => $currency_code,
         'description' => $name,
         'metadata' => $metadata,
+        'idempotency_key' => $uuid,
       );
       $result = uc_gc_client_api($params);
-      $payment_created = $result->response->body->payments;
 
-      $comment = t('Payment for @amount has been created with GoCardless and will be made from your account on @charge_date.', array(
-        '@amount' => uc_currency_format($amount, $currency_sign),
-        '@charge_date' => format_date(strtotime($payment_created->charge_date), 'uc_store'),
-      ));
-      uc_order_comment_save($order->order_id, $order->uid, $comment, 'order', 'Pending', TRUE);
+      if (isset($result->response) && in_array($result->response->status_code, [200, 201])) {
+        $payment_created = $result->response->body->payments;
+        $comment = t('Payment for @amount has been created with GoCardless and will be made from your account on @charge_date.', array(
+          '@amount' => uc_currency_format($amount, $currency_sign),
+          '@charge_date' => format_date(strtotime($payment_created->charge_date), 'uc_store'),
+        ));
+        uc_order_comment_save($order->order_id, $order->uid, $comment, 'order', 'Pending', TRUE);
 
-      $watchdog = "Payment for @amount for order #@order_id has been created with GoCardless and will be taken from user #@uid's account on @charge_date.";
-      watchdog('uc_gc_client', $watchdog, array(
-        '@amount' => uc_currency_format($amount, $currency_sign),
-        '@order_id' => $order->order_id,
-        '@uid' => $order->uid,
-        '@charge_date' => format_date(strtotime($payment_created->charge_date), 'uc_store'),
-      ), WATCHDOG_INFO);
+        $watchdog = "Payment for @amount for order #@order_id has been created with GoCardless and will be taken from user #@uid's account on @charge_date.";
+        watchdog('uc_gc_client', $watchdog, array(
+          '@amount' => uc_currency_format($amount, $currency_sign),
+          '@order_id' => $order->order_id,
+          '@uid' => $order->uid,
+          '@charge_date' => format_date(strtotime($payment_created->charge_date), 'uc_store'),
+        ), WATCHDOG_INFO);
 
-      // Provide a hook so that other modules can respond to payment creation.
-      module_invoke_all('payment_created', $payment_created, $order->order_id, 'scheduled');
+        // Provide a hook so that other modules can respond to payment creation.
+        module_invoke_all('payment_created', $payment_created, $order->order_id, 'scheduled');
+      }
+      else {
+        // If no response or response code 500 (Internal Server Error) then
+        // add the uuid to the current record in uc_gc_client, and continue 
+        // to next item. This is so the item will be retried, and the uuid can
+        // be used again as the same idempotency key, to ensure a duplicate 
+        // payment isn't created.    
+        if (!isset($result->response) || !$result->response || $result->response->status_code == 500) {
+          db_update('uc_gc_client')->fields([
+            'next_payment_uuid' => $uuid,
+          ])->condition('ucid', $payment->ucid)->execute();
+        }
+        $log = t('There was a problem creating a scheduled payment for order #@order_id.', [
+          '@order_id' => $order->order_id,
+        ]);
+        watchdog('uc_gc_client', $log, array(), WATCHDOG_ERROR);
+        continue;
+      }
     }
-
+    
     // Update next_payment field in uc_gc_client table.
     $product = $order->products[$payment->ucpid];
     if (isset($product->data['interval_params'])) {
@@ -875,6 +897,7 @@ function uc_gc_client_cron() {
       db_update('uc_gc_client')
         ->fields(array(
           'next_payment' => $next_payment,
+          'next_payment_uuid' => NULL,
           'updated' => REQUEST_TIME,
         ))
         ->condition('ucpid', $payment->ucpid)
@@ -1481,4 +1504,23 @@ function uc_gc_client_countries_define() {
     ),
   );
   return $countries;
+}
+
+/**
+ * Generate a Universally Unique Identifier.
+ *
+ * @return string
+ *   The generated UUID
+ */
+function uc_gc_client_uuid_generate() {
+  if (function_exists('uuid_create') && !function_exists('uuid_make')) {
+    $callback = '_uuid_generate_pecl';
+  }
+  elseif (function_exists('com_create_guid')) {
+    $callback = '_uuid_generate_com';
+  }
+  else {
+    $callback = '_uuid_generate_php';
+  }
+  return $callback();
 }

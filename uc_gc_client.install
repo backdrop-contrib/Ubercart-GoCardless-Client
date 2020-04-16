@@ -149,6 +149,12 @@ function uc_gc_client_schema() {
         'type' => 'int',
         'not NULL' => FALSE,
       ),
+      'next_payment_uuid' => [
+        'description' => 'Unique identifier for the next payment',
+        'type' => 'varchar',
+        'length' => '128',
+        'not null' => FALSE,
+      ],
       'type' => array(
         'description' => 'Subscription or One-off payment',
         'type' => 'varchar',
@@ -421,3 +427,19 @@ function uc_gc_client_update_7005() {
 function uc_gc_client_update_7006() {
   cache_clear_all();
 }
+
+/**
+ * Add the 'next_payment_uuid' field in the uc_gc_client table.
+ */
+function uc_gc_client_update_7007() {
+  if (!db_field_exists('uc_gc_client', 'next_payment_uuid')) {
+    $field = [
+      'description' => 'Unique identifier for the next payment',
+      'type' => 'varchar',
+      'length' => '128',
+      'not null' => FALSE,
+    ];
+    db_add_field('uc_gc_client', 'next_payment_uuid', $field);
+  }
+}
+

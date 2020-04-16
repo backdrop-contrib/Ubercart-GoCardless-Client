@@ -84,6 +84,7 @@ function uc_gc_client_redirect($redirect, $mandate, $customer, $order_id, $payme
     }
 
     // Insert info about the order into the database.
+    $created = REQUEST_TIME;
     $data = array(
       'ucid'   => $order_id,
       'ucpid'  => $ucpid,
@@ -93,9 +94,9 @@ function uc_gc_client_redirect($redirect, $mandate, $customer, $order_id, $payme
       'uid'    => $uid,
       'type'   => $gc_type,
       'status' => 'pending',
-      'created' => REQUEST_TIME,
+      'created' => $created,
       'start_date' => $start_date,
-      'updated' => REQUEST_TIME,
+      'updated' => $created,
       'sandbox' => variable_get('uc_gc_client_sandbox', TRUE),
     );
     db_insert('uc_gc_client')
@@ -180,6 +181,7 @@ function uc_gc_client_redirect($redirect, $mandate, $customer, $order_id, $payme
         // module.
         $type = 'payment';
         drupal_alter('payment_details', $payment_details, $order, $type);
+        $uuid = uc_gc_client_uuid_generate();
         $params = array(
           'endpoint' => 'payments',
           'action' => 'create',
@@ -188,6 +190,7 @@ function uc_gc_client_redirect($redirect, $mandate, $customer, $order_id, $payme
           'currency' => $payment_details['currency'],
           'description' => $payment_details['description'],
           'metadata' => $payment_details['metadata'],
+          'idempotency_key' => $uuid,
         );
         $result = uc_gc_client_api($params);
 
@@ -218,17 +221,22 @@ function uc_gc_client_redirect($redirect, $mandate, $customer, $order_id, $payme
           module_invoke_all('payment_created', $payment, $order_id, 'checkout');
         }
         else {
-          drupal_set_message(t('An initial payment could not be created because authentication failed. We will try and raise it again later.'), 'error');
+          drupal_set_message(t('An initial payment could not be created because authentication failed. We will try and raise it again later.'), 'warning');
 
           // Update next_payment to now so that it will get picked up on next
           // cron run.
+          $update = array(
+            'next_payment' => $created,
+            'updated' => REQUEST_TIME,
+          ); 
+          if (!isset($result->response) || !$result->response || $result->response->status_code == 500) {
+            // Provide the next payment with the Uuid which will be re-
+            // submitted in the cron run to ensure a duplicate payment isn't
+            // created.
+            $update['next_payment_uuid'] = $uuid;
+          }
           db_update('uc_gc_client')
-            ->fields(array(
-              'next_payment' => REQUEST_TIME,
-              'updated' => REQUEST_TIME,
-            ))
-            ->condition('ucpid', $ucpid)
-            ->execute();
+            ->fields($update)->condition('ucpid', $ucpid)->execute();
         }
       }
 
