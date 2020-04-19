@@ -1515,11 +1515,16 @@ function uc_gc_client_countries_define() {
  *   The generated UUID
  */
 function uc_gc_client_uuid_generate() {
-  return sprintf('%04x%04x-%04x-4%03x-%04x-%04x%04x%04x',
-    mt_rand(0, 0xffff), mt_rand(0, 0xffff),
-    mt_rand(0, 0xffff),
-    mt_rand(0, 0x0fff),
-    mt_rand(0, 0x3fff) | 0x8000,
-    mt_rand(0, 0xffff), mt_rand(0, 0xffff), mt_rand(0, 0xffff)
-  );
+  if (module_exists('uuid')) {
+    return uuid_generate();
+  }
+  else {
+    return sprintf('%04x%04x-%04x-4%03x-%04x-%04x%04x%04x',
+      mt_rand(0, 0xffff), mt_rand(0, 0xffff),
+      mt_rand(0, 0xffff),
+      mt_rand(0, 0x0fff),
+      mt_rand(0, 0x3fff) | 0x8000,
+      mt_rand(0, 0xffff), mt_rand(0, 0xffff), mt_rand(0, 0xffff)
+    );
+  }
 }

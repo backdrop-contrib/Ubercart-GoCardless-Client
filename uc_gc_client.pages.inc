@@ -181,6 +181,7 @@ function uc_gc_client_redirect($redirect, $mandate, $customer, $order_id, $payme
         // module.
         $type = 'payment';
         drupal_alter('payment_details', $payment_details, $order, $type);
+
         $uuid = uc_gc_client_uuid_generate();
         $params = array(
           'endpoint' => 'payments',

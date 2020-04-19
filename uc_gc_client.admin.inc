@@ -38,6 +38,7 @@ function uc_gc_client_uc_payment_method_callback($op, &$order, $form = NULL, &$f
         '#collapsible' => FALSE,
         '#collapsed' => FALSE,
       );
+
       $form['connect']['uc_gc_client_sandbox'] = array(
         '#type' => 'checkbox',
         '#title' => '<b>' . t('Enable Sandbox') . '</b>',
@@ -50,7 +51,7 @@ function uc_gc_client_uc_payment_method_callback($op, &$order, $form = NULL, &$f
         ),
       );
 
-      $markup = '<br /><p><b>' . t('Connect / disconnect with GoCardless') . '</b></p>';
+      $markup = '<p><b>' . t('Connect / disconnect with GoCardless') . '</b></p>';
       if (!$connected) {
         $markup .= '<p>' . t("After clicking 'Connect' you will be redirected to the GoCardless where you can create an account and connect your site as a client of Seamless-CMS.co.uk") . '</p>';
         $form['connect']['markup'] = array(
@@ -68,37 +69,7 @@ function uc_gc_client_uc_payment_method_callback($op, &$order, $form = NULL, &$f
         $form['connect']['markup'] = array(
           '#markup' => $markup,
         );
-        $form['connect']['ext'] = array(
-          '#type' => 'value',
-          '#value' => $ext,
-        );
-        $confirm = t('Are you sure you want to disconnect your site from GoCardless?');
-        $form['connect']['disconnect'] = array(
-          '#type' => 'submit',
-          '#value' => $sandbox ? t('Disconnect SANDBOX') : t('Disconnect LIVE'),
-          '#submit' => array('uc_gc_client_disconnect_submit'),
-          '#attributes' => array('onclick' => 'if (!confirm("' . $confirm . '")) {return false;}'),
-        );
-      }
-
-      global $base_url;
-      $webhook_url = $base_url . '/gc_client/webhook';
-      $gc_webhook_url_env = $sandbox ? '-sandbox' : '';
-      $gc_webhook_url = 'https://manage' . $gc_webhook_url_env . '.gocardless.com/developers/webhook-endpoints/create';
-      $webhook_prefix = t('To receive webhooks, add <i>@webhook_url</i> as webhook URL and set the secret to the same as the Webhook Secret field from <a target="new" href="@gc_webhook_url">here</a>.', array(
-        '@webhook_url' => $webhook_url,
-        '@gc_webhook_url' => $gc_webhook_url,
-      )) . '<br /><br />';
-
-      $form['connect']['uc_gc_client_webhook' . $ext] = array(
-        '#type' => 'textfield',
-        '#title' => t('Webhook secret'),
-        '#default_value' => $sandbox ? variable_get('uc_gc_client_webhook_sandbox') : variable_get('uc_gc_client_webhook_live'),
-        '#field_prefix' => $webhook_prefix,
-      );
-
-      // GoCardless account verification status and onboarding link.
-      if ($connected) {
+        // GoCardless account verification status and onboarding link.
         $params = array(
           'endpoint' => 'creditors',
           'action' => 'list',
@@ -127,6 +98,49 @@ function uc_gc_client_uc_payment_method_callback($op, &$order, $form = NULL, &$f
             );
           }
         }
+        $form['connect']['ext'] = array(
+          '#type' => 'value',
+          '#value' => $ext,
+        );
+        $confirm = t('Are you sure you want to disconnect your site from GoCardless?');
+        $form['connect']['disconnect'] = array(
+          '#type' => 'submit',
+          '#value' => $sandbox ? t('Disconnect SANDBOX') : t('Disconnect LIVE'),
+          '#submit' => array('uc_gc_client_disconnect_submit'),
+          '#attributes' => array('onclick' => 'if (!confirm("' . $confirm . '")) {return false;}'),
+        );
+      }
+      if ($connected) {
+        if (!$webhook_secret = variable_get('uc_gc_client_webhook' . $ext)) {
+          $result = uc_gc_client_api(array(
+            'endpoint' => 'webhook_secret',
+          ))->response;
+          variable_set('uc_gc_client_webhook' . $ext, $webhook_secret);
+        }
+        global $base_url;
+        $webhook_url = $base_url . '/gc_client/webhook';
+        $gc_webhook_url = t('https://manage@env.gocardless.com/developers/webhook-endpoints', [
+          '@env' => $sandbox ? '-sandbox' : '',
+        ]);
+        $webhook_secret_markup = "<p id='webhook_secret'><b>" . t('Webhook secret: ') . "</b>" . $webhook_secret . "</p>";
+        $webhook_secret_markup .= '<p>' . t('To receive webhooks create / update a Webhook Endpoint at your GoCardless account <a target="new" href="@gc_webhook_url">here</a>, and set the Webhook URL as <i>@webhook_url</i>, and the Webhook Secret as the random 30 byte string that has been generated for you above.', [
+          '@webhook_url' => $webhook_url,
+          '@gc_webhook_url' => $gc_webhook_url,
+        ]) . '</p>';
+        $form['connect']['webhook_secret_markup'] = [
+          '#title' => 'Webhook secret',
+          '#type' => 'markup',
+          '#markup' => $webhook_secret_markup,
+        ];
+        $form['connect']['webhook_submit'] = [
+          '#type' => 'submit',
+          '#value' => t('Change secret'),
+          '#suffix' => t('If you change this, and have already set up your webhook endpoint in your GoCardless account, you will need to update it there as well.'),
+          '#ajax' => [
+            'callback' => 'uc_gc_client_webhook_secret_callback',
+            'wrapper' => 'webhook_secret'
+          ],
+        ];
       }
 
       // Global.
@@ -284,6 +298,26 @@ function uc_gc_client_sandbox_callback(&$form, &$form_state) {
   $commands[] = ctools_ajax_command_reload();
   print ajax_render($commands);
   drupal_exit();
+}
+
+/**
+ * AJAX callback function for gc_client_uc_payment_method_callback().
+ *
+ * On submitting 'Change secret' a new client secret is obtained, saved to
+ * the module config and returned for display on the settings form.
+ *
+ * @return array
+ *   The new render array for display on the settings form.
+ */
+function uc_gc_client_webhook_secret_callback(&$form, &$form_state) {
+  drupal_set_message(t('You have changed your webhook secret. If you have already added a secret to your GoCardless account, you will have to update it there as well.'), 'warning');
+  $ext = $form_state['values']['uc_gc_client_sandbox'] ? '_sandbox' : '_live';
+  $webhook_secret = uc_gc_client_api(array(
+    'endpoint' => 'webhook_secret',
+  ))->response;
+  variable_set('uc_gc_client_webhook' . $ext, $webhook_secret);
+  $output = "<p id='webhook_secret'><b>" . t('Webhook secret: ') . "</b>" . $webhook_secret . "</p>";
+  return array('#markup' => $output);
 }
 
 /**
@@ -648,3 +682,5 @@ function uc_gc_client_countries_form_submit($form, &$form_state) {
   }
   variable_set('uc_gc_client_countries', $gc_countries);
 }
+
+
