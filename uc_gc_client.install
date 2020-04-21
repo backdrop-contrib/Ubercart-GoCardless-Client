@@ -111,43 +111,43 @@ function uc_gc_client_schema() {
         'description' => 'Ubercart order ID',
         'type' => 'int',
         'unsigned' => TRUE,
-        'not NULL' => TRUE,
+        'not null' => TRUE,
         'default' => 0,
       ),
       'ucpid' => array(
         'description' => 'Ubercart product ID',
         'type' => 'int',
-        'not NULL' => FALSE,
+        'not null' => FALSE,
       ),
       'gcid' => array(
         'description' => 'The GoCardless mandate ID',
         'type' => 'varchar',
         'length' => '255',
-        'not NULL' => TRUE,
+        'not null' => TRUE,
       ),
       'gcrid' => array(
         'description' => 'The GoCardless Redirect flow ID associated with order',
         'type' => 'varchar',
         'length' => '64',
-        'not NULL' => FALSE,
+        'not null' => FALSE,
       ),
       'gccid' => array(
         'description' => 'The GoCardless Customer ID associated with order',
         'type' => 'varchar',
         'length' => '64',
-        'not NULL' => FALSE,
+        'not null' => FALSE,
       ),
       'uid' => array(
         'description' => 'Customer’s user ID',
         'type' => 'int',
         'unsigned' => TRUE,
-        'not NULL' => TRUE,
+        'not null' => TRUE,
         'default' => 0,
       ),
       'next_payment' => array(
         'description' => 'Timestamp for the next payment',
         'type' => 'int',
-        'not NULL' => FALSE,
+        'not null' => FALSE,
       ),
       'next_payment_uuid' => [
         'description' => 'Unique identifier for the next payment',
@@ -159,38 +159,38 @@ function uc_gc_client_schema() {
         'description' => 'Subscription or One-off payment',
         'type' => 'varchar',
         'length' => '1',
-        'not NULL' => TRUE,
+        'not null' => TRUE,
         'default' => 'S',
       ),
       'status' => array(
         'description' => 'The GoCardless mandate status',
         'type' => 'varchar',
         'length' => '255',
-        'not NULL' => FALSE,
+        'not null' => FALSE,
       ),
       'created' => array(
         'description' => 'Unix timestamp when the order was created',
         'type' => 'int',
-        'not NULL' => TRUE,
+        'not null' => TRUE,
         'default' => 0,
       ),
       'start_date' => array(
         'description' => 'Unix timestamp when the first payment is charged',
         'type' => 'int',
-        'not NULL' => FALSE,
+        'not null' => FALSE,
         'default' => 0,
       ),
       'updated' => array(
         'description' => 'Unix timestamp when the Status was updated',
         'type' => 'int',
-        'not NULL' => TRUE,
+        'not null' => TRUE,
         'default' => 0,
       ),
       'sandbox' => array(
         'description' => 'Whether or not it is a sandbox transaction',
         'type' => 'int',
         'size' => 'tiny',
-        'not NULL' => TRUE,
+        'not null' => TRUE,
         'default' => 0,
       ),
     ),
@@ -204,18 +204,19 @@ function uc_gc_client_schema() {
       'nid' => array(
         'description' => 'The node ID for the product',
         'type' => 'int',
-        'not NULL' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
       ),
       'type' => array(
         'description' => 'Subscription or pre-authorization',
         'type' => 'varchar',
         'length' => '1',
-        'not NULL' => FALSE,
+        'not null' => FALSE,
       ),
       'price_x' => array(
         'description' => 'Subscription multiplier',
         'type' => 'numeric',
-        'not NULL' => TRUE,
+        'not null' => TRUE,
         'default' => 1,
         'precision' => '6',
         'scale' => '3',
@@ -223,24 +224,24 @@ function uc_gc_client_schema() {
       'start_date' => array(
         'description' => 'Optional start date for new mandate',
         'type' => 'int',
-        'not NULL' => FALSE,
+        'not null' => FALSE,
       ),
       'interval_length' => array(
         'description' => 'The interval between scheduled payment creations',
         'type' => 'int',
-        'not NULL' => FALSE,
+        'not null' => FALSE,
       ),
       'interval_unit' => array(
         'description' => 'The interval unit between scheduled payment creations',
         'type' => 'varchar',
         'length' => '32',
-        'not NULL' => FALSE,
+        'not null' => FALSE,
       ),
       'raise_payment' => array(
         'description' => 'Raise payment immediately upon completion of checkout',
         'type' => 'int',
         'size' => 'tiny',
-        'not NULL' => TRUE,
+        'not null' => TRUE,
       ),
     ),
     'primary key' => array('nid'),
@@ -251,50 +252,50 @@ function uc_gc_client_schema() {
       'sid' => array(
         'description' => 'Schedule ID',
         'type' => 'serial',
-        'not NULL' => TRUE,
+        'not null' => TRUE,
       ),
       'ucid' => array(
         'description' => 'Order ID',
         'type' => 'int',
-        'not NULL' => TRUE,
+        'not null' => TRUE,
       ),
       'ucpid' => array(
         'description' => 'Product ID',
         'type' => 'int',
-        'not NULL' => TRUE,
+        'not null' => TRUE,
       ),
       'type' => array(
         'description' => 'The type of scheduled event',
         'type' => 'varchar',
         'length' => '16',
-        'not NULL' => TRUE,
+        'not null' => TRUE,
       ),
       'date' => array(
         'description' => 'A formatted date string for the scheduled event',
         'type' => 'varchar',
         'length' => '32',
-        'not NULL' => TRUE,
+        'not null' => TRUE,
       ),
       'timestamp' => array(
         'description' => 'The timestamp for the scheduled event',
         'type' => 'int',
-        'not NULL' => TRUE,
+        'not null' => TRUE,
       ),
       'status' => array(
         'description' => 'The status of the schedule',
         'type' => 'int',
         'size' => 'tiny',
-        'not NULL' => TRUE,
+        'not null' => TRUE,
       ),
       'data' => array(
         'description' => 'Available for serialized data by other modules',
         'type' => 'blob',
-        'not NULL' => FALSE,
+        'not null' => FALSE,
       ),
       'created' => array(
         'description' => 'Timestamp when scheduled event was created',
         'type' => 'int',
-        'not NULL' => FALSE,
+        'not null' => FALSE,
       ),
     ),
     'primary key' => array('sid'),
@@ -310,23 +311,23 @@ function uc_gc_client_schema() {
       'aid' => array(
         'description' => 'The Scheduled Adjustment ID',
         'type' => 'serial',
-        'not NULL' => TRUE,
+        'not null' => TRUE,
       ),
       'sid' => array(
         'description' => 'The Schedule ID',
         'type' => 'int',
-        'not NULL' => TRUE,
+        'not null' => TRUE,
       ),
       'title' => array(
         'description' => 'An optional  title for the Scheduled Adj',
         'type' => 'varchar',
         'length' => '64',
-        'not NULL' => FALSE,
+        'not null' => FALSE,
       ),
       'amount' => array(
         'description' => 'The amount of the Scheduled Adj',
         'type' => 'numeric',
-        'not NULL' => TRUE,
+        'not null' => TRUE,
         'precision' => '10',
         'scale' => '2',
       ),
@@ -443,3 +444,20 @@ function uc_gc_client_update_7007() {
   }
 }
 
+/**
+ * Update the uc_gc_client_products table
+ */
+function uc_gc_client_update_7008() {
+  db_drop_primary_key('uc_gc_client_products');
+  db_change_field('uc_gc_client_products','nid', 'nid',
+    array(
+      'description' => 'The node ID for the product',
+      'type' => 'int',
+      'not null' => TRUE,
+      'default' => 0,
+    ), array(
+      'primary key' => array(
+      'nid',
+    ),
+  ));
+}

@@ -101,34 +101,40 @@ function uc_gc_client_authenticate() {
       'username' => variable_get('uc_gc_client_user_name' . $ext),
       'password' => variable_get('uc_gc_client_user_pass' . $ext),
     );
-    $data = drupal_json_encode($data);
-    $url = variable_get('uc_gc_client_partner_url') . '/gc_connect/user/login';
-    $options = array(
-      'headers' => array(
-        'Content-Type' => 'application/json',
-      ),
-      'method' => 'POST',
-      'data' => $data,
-    );
-    $result = drupal_http_request($url, $options);
-    $result_data = json_decode($result->data);
-
-    if ($result->code == 200) {
-      // Get X-CRSF token, and save cookie and token.
-      $_SESSION['uc_gc_client_cookie'] = $result_data->session_name . '=' . $result_data->sessid;
-      $_SESSION['uc_gc_client_cookie_created'] = REQUEST_TIME;
-      $xcrf_url = variable_get('uc_gc_client_partner_url') . '/services/session/token';
-      $xcrf_options = array(
-        'method' => 'GET',
+    if ($data['username'] && $data['password']) {
+      $data = drupal_json_encode($data);
+      $url = variable_get('uc_gc_client_partner_url') . '/gc_connect/user/login';
+      $options = array(
         'headers' => array(
-          'Cookie' => $_SESSION['uc_gc_client_cookie'],
+          'Content-Type' => 'application/json',
         ),
+        'method' => 'POST',
+        'data' => $data,
       );
-      $xcrf_result = drupal_http_request($xcrf_url, $xcrf_options);
-      $token = $xcrf_result->data;
-      $_SESSION['uc_gc_client_token'] = $token;
+      $result = drupal_http_request($url, $options);
+      
+      $result_data = json_decode($result->data);
+
+      if ($result->code == 200) {
+        // Get X-CRSF token, and save cookie and token.
+        $_SESSION['uc_gc_client_cookie'] = $result_data->session_name . '=' . $result_data->sessid;
+        $_SESSION['uc_gc_client_cookie_created'] = REQUEST_TIME;
+        $xcrf_url = variable_get('uc_gc_client_partner_url') . '/services/session/token';
+        $xcrf_options = array(
+          'method' => 'GET',
+          'headers' => array(
+            'Cookie' => $_SESSION['uc_gc_client_cookie'],
+          ),
+        );
+        $xcrf_result = drupal_http_request($xcrf_url, $xcrf_options);
+        $token = $xcrf_result->data;
+        $_SESSION['uc_gc_client_token'] = $token;
+      }
+      return $result->code;
     }
-    return $result->code;
+    else {
+      return 'User name and password not set';
+    }
   }
   else {
     // Already logged in.

@@ -112,7 +112,7 @@ function uc_gc_client_uc_payment_method_callback($op, &$order, $form = NULL, &$f
       }
       if ($connected) {
         if (!$webhook_secret = variable_get('uc_gc_client_webhook' . $ext)) {
-          $result = uc_gc_client_api(array(
+          $webhook_secret = uc_gc_client_api(array(
             'endpoint' => 'webhook_secret',
           ))->response;
           variable_set('uc_gc_client_webhook' . $ext, $webhook_secret);
@@ -127,20 +127,20 @@ function uc_gc_client_uc_payment_method_callback($op, &$order, $form = NULL, &$f
           '@webhook_url' => $webhook_url,
           '@gc_webhook_url' => $gc_webhook_url,
         ]) . '</p>';
-        $form['connect']['webhook_secret_markup'] = [
+        $form['connect']['webhook_secret_markup'] = array(
           '#title' => 'Webhook secret',
           '#type' => 'markup',
           '#markup' => $webhook_secret_markup,
-        ];
-        $form['connect']['webhook_submit'] = [
+        );
+        $form['connect']['webhook_submit'] = array(
           '#type' => 'submit',
           '#value' => t('Change secret'),
           '#suffix' => t('If you change this, and have already set up your webhook endpoint in your GoCardless account, you will need to update it there as well.'),
-          '#ajax' => [
+          '#ajax' => array(
             'callback' => 'uc_gc_client_webhook_secret_callback',
             'wrapper' => 'webhook_secret'
-          ],
-        ];
+          ),
+        );
       }
 
       // Global.
@@ -509,6 +509,7 @@ function uc_gc_client_node_insert($node) {
         'start_date' => !empty($node->start_date) ? $node->start_date : NULL,
         'interval_length' => !empty($node->interval_length) ? $node->interval_length : NULL,
         'interval_unit' => !empty($node->interval_unit) ? $node->interval_unit : NULL,
+        'raise_payment' => !empty($node->raise_payment) ? 1 : 0,
       ))
       ->execute();
   }
