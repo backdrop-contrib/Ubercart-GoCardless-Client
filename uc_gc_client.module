@@ -704,8 +704,8 @@ function uc_gc_client_cron() {
 
   // Get list of active orders where next_payment is in the past.
   $payments = db_select('uc_gc_client', 'g')
-    ->fields('g', array('ucid', 'ucpid', 'gcid', 'uid', 'next_payment', 'next_payment_uuid'))
-    ->condition('type', 'S', '!=')
+    ->fields('g')
+    ->condition('type', array('S', 'P'), 'IN')
     ->condition('status', 'canceled', '!=')
     ->condition('next_payment', REQUEST_TIME, '<=')
     ->execute()
@@ -716,6 +716,48 @@ function uc_gc_client_cron() {
   foreach ($payments as $payment) {
     // Check status of the mandate, do not create payment if it is cancelled.
     $order = uc_order_load($payment->ucid);
+    $product = $order->products[$payment->ucpid];
+
+    // Retry a Subscription creation if there was a failure at the GoCardless
+    // end during checkout.
+    if ($payment->type == 'S') {
+      $update_next_payment = TRUE;
+      if (isset($product->data['subs_details'])) {
+        $result = uc_gc_client_api($product->data['subs_details']);
+
+        // New subscription created successfully, or had already been created.
+        if (isset($result->response) && in_array($result->response->status_code, [200, 201])) {
+          unset($order->products[$payment->ucpid]->data['subs_details']);
+          uc_order_save($order);
+        }
+        else {
+          // If no response or response code 500 (Internal Server Error) then
+          // do nothing and the Subscription creation will be retried on the
+          // next cron run. But if there is a reponse then the error is at this
+          // end so abort Subscription creation attempt.
+          $watchdog_array = ['@order_id' => $payment->ucid];
+          if (isset($result->response) && $result->response && $result->response->status_code != 500) {
+            $watchdog = t('A scheduled subscription creation could not be created for order #@order_id.', $watchdog_array);
+            watchdog('uc_gc_client', $watchdog, NULL, WATCHDOG_ERROR);
+          }
+          else {
+            $update_next_payment = FALSE;
+            $watchdog = t('There was a problem with a scheduled subscription creation for order #@order_id, and it will be retried on the next cron run.', $watchdog_array);
+            watchdog('uc_gc_client', $watchdog, NULL, WATCHDOG_WARNING);
+          }
+        }
+      }
+      if ($update_next_payment) {
+        db_update('uc_gc_client')->fields([
+          'next_payment' => NULL,
+        ])->condition('ucpid', $payment->ucpid)->execute();
+      }
+      continue;
+    }
+
+
+
+
     $params = array(
       'endpoint' => 'mandates',
       'action' => 'get',
@@ -886,7 +928,6 @@ function uc_gc_client_cron() {
     }
     
     // Update next_payment field in uc_gc_client table.
-    $product = $order->products[$payment->ucpid];
     if (isset($product->data['interval_params'])) {
       $string = '+' . $product->data['interval_params']['string'];
       $next_payment = strtotime($string, $payment->next_payment);

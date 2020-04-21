@@ -234,12 +234,11 @@ function uc_gc_client_payments_form($form, &$form_state, $order) {
   $payment_rows = array();
   $payment_total = 0;
   $payment_statuses = array('confirmed', 'paid_out');
-  foreach ($payments as &$payment) {
 
+  foreach ($payments as &$payment) {
     if ($payment->metadata->ucpid != $ucpid) {
       continue;
     }
-
     if ($payment->status == 'pending_submission') {
       $link = l(t('Cancel'), '/admin/store/orders/' . $order->order_id . '/gocardless/cancel_payment/' . check_plain($payment->id));
     }

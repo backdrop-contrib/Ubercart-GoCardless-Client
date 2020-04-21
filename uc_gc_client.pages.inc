@@ -134,6 +134,7 @@ function uc_gc_client_redirect($redirect, $mandate, $customer, $order_id, $payme
         'interval' => $payment_details['interval'],
         'interval_unit' => $payment_details['interval_unit'],
         'metadata' => $payment_details['metadata'],
+        'idempotency_key' => uc_gc_client_uuid_generate(),
       );
       if (!$product_uc->raise_payment) {
         $params['start_date'] = format_date($start_date, 'gocardless');
@@ -154,11 +155,24 @@ function uc_gc_client_redirect($redirect, $mandate, $customer, $order_id, $payme
         drupal_set_message($comment);
       }
       else {
-        drupal_set_message(t('Something went wrong creating your subscription with GoCardless. Please contact the site administrator for assistance.'), 'warning');
+        if (!isset($result->response) || !$result->response || $result->response->status_code == 500) {
+          drupal_set_message(t('There was a problem creating your subscription at GoCardless, so we will resubmit it later.'), 'warning');
+          db_update('uc_gc_client')
+            ->fields(array(
+              'next_payment' => $created,
+            ))
+            ->condition('ucpid', $ucpid)->execute();
+
+          $order->products[$ucpid]->data['subs_details'] = $params;
+          uc_order_save($order);
+        }
+        else {
+          drupal_set_message(t('Something went wrong creating your subscription with GoCardless. Please contact the site administrator for assistance.'), 'error');
+        }
       }
     }
 
-    // If it is not a subscription.
+    // If it is one-off Payments.
     elseif ($gc_type != 'S') {
       // If raise_payment is set for the product then raise the first payment
       // immediately.
@@ -204,8 +218,7 @@ function uc_gc_client_redirect($redirect, $mandate, $customer, $order_id, $payme
               'next_payment' => $next_payment,
               'updated' => REQUEST_TIME,
             ))
-            ->condition('ucpid', $ucpid)
-            ->execute();
+            ->condition('ucpid', $ucpid)->execute();
 
           // Let everyone know what is going on.
           $comment_array = array(
