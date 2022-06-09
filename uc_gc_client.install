@@ -10,7 +10,7 @@
  */
 function uc_gc_client_install() {
   variable_set('uc_gc_client_partner_url', 'https://seamless-cms.co.uk');
-  variable_set('uc_gc_client_checkout_label', 'Create Direct Debit with GoCardless');
+  variable_set('uc_gc_client_checkout_label', 'Pay with GoCardless');
   variable_set('uc_gc_client_default_type', 'P');
   variable_set('uc_gc_client_sandbox', 1);
   variable_set('uc_gc_client_create_payment', 0);
@@ -460,4 +460,53 @@ function uc_gc_client_update_7008() {
       'nid',
     ),
   ));
+}
+
+/**
+ * Add new "GoCardless Payment failed" order status.
+ */
+function uc_gc_client_update_7009() {
+  $t = get_t();
+  db_insert('uc_order_statuses')
+    ->fields(array(
+      'order_status_id' => 'gocardless_payment_failed',
+      'title' => $t('GoCardless payment failed'),
+      'state' => 'post_checkout',
+      'weight' => 9,
+      'locked' => 1,
+    ))
+    ->execute();
+}
+
+/**
+ * Delete the uc_gc_client_fixer variable.
+ */
+function uc_gc_client_update_7010() {
+  variable_del('uc_gc_client_fixer');
+  return t('The fixer.io variable has been deleted since the module now uses the GoCardless API to look up exchange rates.');
+}
+
+/**
+ * Clear cache to register updated menu items.
+ */
+function uc_gc_client_update_7011() {
+  cache_clear_all();
+  return t('Cache cleared');
+}
+
+/**
+ * Provide essential updated site details to Seamless-CMS.
+ */
+function uc_gc_client_update_7012() {
+  global $base_url;
+  $data = array(
+    'endpoint' => 'client',
+    'action' => 'update',
+    'client_domain' => parse_url($base_url, PHP_URL_HOST),
+    'client_domain_scheme' => parse_url($base_url, PHP_URL_SCHEME),
+    'module' => 'Ubercart 7.x-2.x',
+    'site_email' => variable_get('site_mail'),
+  );
+  $result = uc_gc_client_post($data);
+  return $result->response;
 }

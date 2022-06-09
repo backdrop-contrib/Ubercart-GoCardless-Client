@@ -49,6 +49,20 @@ function uc_gc_client_menu() {
     'type' => MENU_CALLBACK,
     'file' => 'uc_gc_client.pages.inc',
   );
+  $items['cart/gc_client/billing_request_complete'] = array(
+    'title' => 'GoCardless redirect billing request',
+    'page callback' => 'uc_gc_client_billing_request',
+    'access arguments' => array('access content'),
+    'type' => MENU_CALLBACK,
+    'file' => 'uc_gc_client.pages.inc',
+  );
+  $items['cart/gc_client/billing_request_exit'] = array(
+    'title' => 'GoCardless redirect billing exit',
+    'page callback' => 'uc_gc_client_billing_request_exit',
+    'access arguments' => array('access content'),
+    'type' => MENU_CALLBACK,
+    'file' => 'uc_gc_client.pages.inc',
+  );
   $items['gc_client/webhook'] = array(
     'title' => 'GoCardless webhooks',
     'page callback' => 'uc_gc_client_webhook',
@@ -264,36 +278,21 @@ function uc_gc_client_form_uc_cart_checkout_review_form_alter(&$form, &$form_sta
     }
     if ($order->payment_method == 'gc_client') {
       $form['actions']['submit']['#access'] = FALSE;
-      $form['#prefix'] = '<table style="display: inline; padding-top: 1em;"><tr><td>';
+      $form['#prefix'] = '<table style="display:inline;padding-top:1em;"><tr><td>';
       $checkout_review_form = drupal_get_form('uc_gc_client_checkout_review_form', $order);
-      $suffix = '</td><td>' . drupal_render($checkout_review_form) . '</td></tr></table>';
+      $suffix = '</td><td style="width:100%;text-align:center;">' . drupal_render($checkout_review_form) . '</td></tr></table>';
       $form['#suffix'] = $suffix;
     }
   }
 }
 
 /**
- * Form submission handler.
- *
- * Called during checkout only if the Optional Checkout Review config is set.
- */
-function uc_gc_client_checkout_form_submit($form, $form_state) {
-  uc_gc_client_form_submit($form, $form_state);
-}
-
-/**
  * Form constructor: returns elements for the checkout review form.
  */
 function uc_gc_client_checkout_review_form($form_state, $order) {
-  $order_id = $order['build_info']['args']['0']->order_id;
-  $mandate_details = uc_gc_client_mandate_details($order);
-  $form['mandate_details'] = array(
+  $form['order'] = array(
     '#type' => 'value',
-    '#value' => $mandate_details,
-  );
-  $form['order_id'] = array(
-    '#type' => 'value',
-    '#value' => $order_id,
+    '#value' => $order['build_info']['args'][0],
   );
   // Provide a submit button for the Checkout review form.
   $form['gocardless_link'] = array(
@@ -310,26 +309,126 @@ function uc_gc_client_checkout_review_form($form_state, $order) {
  * Submit the checkout review form and redirect to Partner site to
  * begin the Redirect Flow.
  */
-function uc_gc_client_form_submit($form, $form_state) {
-  if (isset($form_state['values']['mandate_details'])) {
-    $mandate_details = $form_state['values']['mandate_details'];
-    $order_id = $form_state['values']['order_id'];
-  }
-  else {
-    $order = $form_state['storage']['order'];
-    $order_id = $order->order_id;
-    $mandate_details = uc_gc_client_mandate_details($order);
-  }
+function uc_gc_client_checkout_form_submit($form, $form_state) {
   $auth = uc_gc_client_authenticate();
   if ($auth == 200) {
-    $data = array(
-      'endpoint' => 'redirect_flows',
-      'action' => 'create',
-      'mandate_details' => $mandate_details,
-      'order_id' => $order_id,
-    );
+    $key = isset($form_state['values']['order']) ? 'values' : 'storage';
+    $order = $form_state[$key]['order'];
+
+    // Obtain the amount, currency, and scheme.
+    $calculated_total = 0;
+    foreach ($order->products as $product) {
+      $calculate = uc_gc_client_price_calculate($order, $product->order_product_id); 
+      $calculated_total += $calculate['amount'];
+    }
+    $currency = isset($calculate['currency']) ? $calculate['currency'] : $order->currency;
+    if (isset($calculate['region'])) {
+      $scheme = $calculate['region'];
+    }
+    else {
+      $countries = uc_gc_client_countries_define();
+      foreach($countries as $country) {
+        if ($country['currency'] == $order->currency) {
+          $scheme = $country['region'];
+          break;
+        }
+      }
+    }
+
+    // Determine if a Billing Request flow or Redirect flow.
+    $mandate = FALSE;
+    $billing_request = TRUE;
+    $details = uc_gc_client_redirect_details($order);
+    foreach ($order->products as $product) {
+ 
+      // If the currency is neither GBP or EUR use the Redirect Flow 
+      if ($currency != 'GBP' && $currency != 'EUR') {
+        $billing_request = FALSE;
+        break;
+      }
+      // If the currency is EUR but the customer is not German then use
+      // Redirect Flow 
+      elseif ($currency == 'EUR' && $details['user']['billing_country'] != 'DE') {
+        $billing_request = FALSE;
+        break;
+      }
+      // Else determine flow based on cart contents.
+      // The Billing Request flow is only required if all the cart items are 
+      // elligible for an instant payment. This includes products of "Instant 
+      // Payment" type, and also the "One-off" type but only if configured to 
+      // raise a payment immediately on checkout. Carts that contain a 
+      // "Subscription" product always use the Redirect flow. Carts that contain
+      // either a "Subscription", or a "One-off" payments product always require
+      // a mandate. 
+      else {
+        if (isset($product->data['gc_auth_type'])) {
+          $type = $product->data['gc_auth_type'];
+          if ($type == 'subscription') {
+            $mandate = TRUE;
+            $billing_request = FALSE;
+            break;
+          }
+          elseif ($type == 'payment') {
+            $mandate = TRUE;
+            $product_uc = db_select('uc_gc_client_products', 'p')
+              ->fields('p')
+              ->condition('nid', $product->nid)
+              ->execute()->fetch();
+            if (!$product_uc->raise_payment) {
+              $billing_request = FALSE;
+            }
+          }
+        }
+      }
+    } 
+
+    // Billing Request Flow
+    if ($billing_request) {
+      global $base_url;
+      // Adds a hook so that the details can be altered by other modules.
+      drupal_alter('billing_request_details', $details, $order->order_id);
+      $data = array(
+        'endpoint' => 'billing_request_flows',
+        'action' => 'create',
+        'order_id' => $order->order_id,
+        'payment_request' => array(
+          'description' => 'Order #' . $order->order_id,
+          'amount' => $calculated_total * 100,
+          'currency' => $currency,
+        ),
+        'billing_request_details' => array(
+          'user' => $details['user'],
+        ),
+        'base_url' => $base_url,
+        'redirect_path' => '/cart/gc_client/billing_request_complete',
+        'exit_path' => '/cart/gc_client/billing_request_exit',
+      );
+      if ($mandate) {
+        $data['mandate_request'] = array('scheme' => $scheme);
+      }
+    }
+
+    // Redirect Flow
+    else {
+      $details['scheme'] = $scheme;
+      drupal_alter('mandate_details', $details, $order->order_id);
+      $ext = variable_get('uc_gc_client_sandbox') ? '_sandbox' : '_live';
+      $details['redirect_uri'] = variable_get('uc_gc_client_partner_url') . '/gc_partner/mandate?org_id=' . variable_get('uc_gc_client_org_id' . $ext) . '&order_id=' . $order->order_id . '&payment_method=' . $order->payment_method;
+      $data = array(
+        'endpoint' => 'redirect_flows',
+        'action' => 'create',
+        'mandate_details' => $details,
+        'order_id' => $order->order_id,
+      );
+    }
     $result = uc_gc_client_post($data);
-    drupal_goto($result->response);
+    if (isset($result->response->api_error)) {
+      drupal_set_message(t('There was an error checking out with GoCardless. Please contact the site administrator for assistance.'), 'error');
+      watchdog('uc_gc_client', print_r($result, TRUE), NULL, WATCHDOG_ERROR);
+    }
+    else {
+      drupal_goto($result->response);
+    }
   }
   else {
     drupal_set_message(t('Something went wrong with authentication'), 'error');
@@ -348,7 +447,7 @@ function uc_gc_client_form_submit($form, $form_state) {
  *   Details for the new mandate to be created by GoCardless in the Redirect
  *   Flow.
  */
-function uc_gc_client_mandate_details($order) {
+function uc_gc_client_redirect_details($order) {
   // Depending on if Optional Checkout Review is selected.
   if (is_array($order)) {
     $order = $order['build_info']['args']['0'];
@@ -379,56 +478,21 @@ function uc_gc_client_mandate_details($order) {
     drupal_goto($_SERVER['HTTP_REFERER']);
   }
 
-  // Generate the mandate_details array.
-  $mandate_details = array(
-    'name'              => 'Order ' . check_plain($order->order_id),
-    'user'              => array(
-      'first_name'        => check_plain($first_name),
-      'last_name'         => check_plain($last_name),
-      'email'             => $order->primary_email,
-      'company_name'      => $company,
-      'billing_address1'  => $street1,
-      'billing_address2'  => $street2,
-      'billing_town'      => $city,
-      'billing_postcode'  => $postal_code,
-      'billing_country'  => $country_code,
+  $details = array(
+    'name' => 'Order ' . check_plain($order->order_id),
+    'user' => array(
+      'first_name' => check_plain($first_name),
+      'last_name' => check_plain($last_name),
+      'email' => $order->primary_email,
+      'company_name' => $company,
+      'billing_address1' => $street1,
+      'billing_address2' => $street2,
+      'billing_town' => $city,
+      'billing_postcode' => $postal_code,
+      'billing_country' => $country_code,
     ),
   );
-
-  variable_get('uc_gc_client_sandbox') ? $ext = '_sandbox' : $ext = '_live';
-  $mandate_details['redirect_uri'] = variable_get('uc_gc_client_partner_url') . '/gc_partner/mandate?org_id=' . variable_get('uc_gc_client_org_id' . $ext) . '&order_id=' . $order->order_id . '&payment_method=' . $order->payment_method;
-
-  // Provide a hook so that mandate details can be altered by another module.
-  drupal_alter('mandate_details', $mandate_details, $order->order_id);
-
-  return $mandate_details;
-}
-
-/**
- * Returns a start date for new payments.
- *
- * Based on GC settings for and whether a valid start date is specified for a
- * product. For one-off payments this will be used as the charge_date. For
- * subscriptions it will provide the start_date.
- *
- * @return string
- *   The start date.
- */
-function uc_gc_client_start_date() {
-  $doms = variable_get('uc_gc_client_dom');
-  if (!empty($doms)) {
-    // Create a sequential array of available dates and return the soonest.
-    $est_charge_date = uc_gc_client_working_days_calculate('+', 4, date('Y-m-d'));
-    $doms = explode(', ', $doms);
-    $dates = array();
-    foreach ($doms as $dom) {
-      $dom >= date('d', strtotime($est_charge_date)) ? $month = 'last' : $month = 'this';
-      $time = strtotime('+' . $dom . ' days', strtotime('last day of ' . $month . ' month'));
-      $dates[] = $time;
-    }
-    sort($dates);
-    return array_shift($dates);
-  }
+  return $details;
 }
 
 /**
@@ -486,7 +550,15 @@ function uc_gc_client_uc_add_to_cart_data($form_values) {
 
   // Add GC type.
   if (isset($extras['type'])) {
-    $extras['type'] == 'S' ? $gc_type = 'subscription' : $gc_type = 'payment';
+    if ($extras['type'] == 'S') {
+      $gc_type = 'subscription';
+    }
+    elseif ($extras['type'] == 'P') {
+      $gc_type = 'payment';
+    }
+    else {
+      $gc_type = 'instant';
+    }
   }
   else {
     $gc_type = NULL;
@@ -604,30 +676,29 @@ function uc_gc_client_uc_order_pane_callback($op, $order) {
         ->condition('ucid', $order->order_id, '=')
         ->execute()->fetch();
 
-      $build = 'Mandate ID: ' . $gc->gcid . '<br />';
-      $build .= 'Created: ' . format_date($gc->created, 'uc_store') . '<br />';
-      $gc->status == 'completed' ? $status = 'Active' : $status = $gc->status;
-      $build .= 'Status: ' . $status . '<br />';
-      $gc->type == 'P' ? $type = 'Payments' : $type = 'Subscription';
-      $build .= 'Type: ' . $type . '<br />';
-      !is_null($gc->start_date) ? $start = format_date($gc->start_date, 'uc_store') . '<br />' : $start = 'Not set<br />';
-      $build .= 'Start: ' . $start;
-
-      if (isset($order->products[$gc->ucpid]->data['interval_params'])) {
-        $params = $order->products[$gc->ucpid]->data['interval_params'];
-        $interval = $params['length'] . ' ' . $params['unit'];
-      }
-      else {
-        $interval = 'Not set';
-      }
-      $build .= 'Payment Interval: ' . $interval . '<br />';
-
-      if ($gc->status != 'canceled' && $gc->type == 'P') {
-
-        !is_null($gc->next_payment) ? $next_payment = format_date($gc->next_payment) . '<br />' : $next_payment = 'Not set<br />';
-        $build .= 'Next payment creation: ' . $next_payment;
-      }
-      return array('#markup' => $build);
+      if ($gc) {
+        $build = 'Mandate ID: ' . $gc->gcid . '<br />';
+        $build .= 'Created: ' . format_date($gc->created, 'uc_store') . '<br />';
+        $gc->status == 'completed' ? $status = 'Active' : $status = $gc->status;
+        $build .= 'Status: ' . $status . '<br />';
+        $gc->type == 'P' ? $type = 'Payments' : $type = 'Subscription';
+        $build .= 'Type: ' . $type . '<br />';
+        !is_null($gc->start_date) ? $start = format_date($gc->start_date, 'uc_store') . '<br />' : $start = 'Not set<br />';
+        $build .= 'Start: ' . $start;
+        if (isset($order->products[$gc->ucpid]->data['interval_params'])) {
+          $params = $order->products[$gc->ucpid]->data['interval_params'];
+          $interval = $params['length'] . ' ' . $params['unit'];
+        }
+        else {
+          $interval = 'Not set';
+        }
+        $build .= 'Payment Interval: ' . $interval . '<br />';
+        if ($gc->status != 'canceled' && $gc->type == 'P') {
+          !is_null($gc->next_payment) ? $next_payment = format_date($gc->next_payment) . '<br />' : $next_payment = 'Not set<br />';
+          $build .= 'Next payment creation: ' . $next_payment;
+        }
+        return array('#markup' => $build);
+      }  
   }
 }
 
@@ -667,7 +738,7 @@ function uc_gc_client_pane_cancel_form($form, &$form_state, $order) {
     $form['order'] = array(
       '#value' => $order,
     );
-    $confirm = t('Are you sure you want to cancel the direct debit mandate? This action cannot be undone.');
+    $confirm = t('Are you sure you want to cancel the debit mandate? This action cannot be undone.');
     $form['submit'] = array(
       '#type' => 'submit',
       '#value' => t('Cancel GoCardless mandate'),
@@ -754,9 +825,6 @@ function uc_gc_client_cron() {
       }
       continue;
     }
-
-
-
 
     $params = array(
       'endpoint' => 'mandates',
@@ -976,27 +1044,28 @@ function uc_gc_client_cron() {
  *   Data including the price of an order modified by the multiplier and other
  *   factors.
  */
-function uc_gc_client_price_calculate($order, $ucpid, $next_paymentdate, $status, array $data = array()) {
-  // Process scheduled adjustments.
-  $query = db_select('uc_gc_client_schedules', 's');
-  $query->join('uc_gc_client_schedules_adjs', 'a', 'a.sid = s.sid');
-  $adjustments = $query
-    ->fields('s', array('sid', 'date', 'status'))
-    ->fields('a', array('title', 'amount', 'aid'))
-    ->condition('s.status', $status)
-    ->condition('s.date', $next_paymentdate)
-    ->condition('type', 'adjustment')
-    ->condition('ucpid', $ucpid)
-    ->orderBy('timestamp', 'ASC')
-    ->execute()->fetchAll();
-
+function uc_gc_client_price_calculate($order, $ucpid, $next_paymentdate = FALSE, $status = FALSE, array $data = array()) {
   $calcs_array = array();
+  // Process scheduled adjustments.
   $adjs_total = 0;
-  foreach ($adjustments as $adj) {
-    // Todo Ensure this will not break if 2 adjustments on same date have same
-    // title.
-    $calcs_array['adjs'][$adj->title] = $adj->amount;
-    $adjs_total = $adjs_total + $adj->amount;
+  if ($next_paymentdate && $status) {
+    $query = db_select('uc_gc_client_schedules', 's');
+    $query->join('uc_gc_client_schedules_adjs', 'a', 'a.sid = s.sid');
+    $adjustments = $query
+      ->fields('s', array('sid', 'date', 'status'))
+      ->fields('a', array('title', 'amount', 'aid'))
+      ->condition('s.status', $status)
+      ->condition('s.date', $next_paymentdate)
+      ->condition('type', 'adjustment')
+      ->condition('ucpid', $ucpid)
+      ->orderBy('timestamp', 'ASC')
+      ->execute()->fetchAll();
+    foreach ($adjustments as $adj) {
+      // Todo Ensure this will not break if 2 adjustments on same date have same
+      // title.
+      $calcs_array['adjs'][$adj->title] = $adj->amount;
+      $adjs_total = $adjs_total + $adj->amount;
+    }
   }
 
   // Factor in price multiplier.
@@ -1033,49 +1102,41 @@ function uc_gc_client_price_calculate($order, $ucpid, $next_paymentdate, $status
     // one product in the order.
   }
 
-  $data ? $amount = $data['amount'] : $amount = $product->price;
+  $amount = $data ? $data['amount'] : $product->price;
   $amount = ($amount + $adjs_total + $line_items) * $price_x;
 
   // Modify payment amount and currency if international customer.
   if (variable_get('uc_gc_client_currencies')) {
     $default_currency = variable_get('uc_currency_code');
-
-    !empty($order->billing_country) ? $country_code = $order->billing_country : $country_code = $order->delivery_country;
+    $country_code = !empty($order->billing_country) ? $order->billing_country : $order->delivery_country;
     $currency_arr = uc_gc_client_currency($country_code);
-
+    // Get latest exchange rate from GoCardless and alter the product price.
     if ($default_currency != $currency_arr['currency']) {
-      // Use fixer.io to provide latest exchange rates for currency conversion.
-      if ($fixer = variable_get('uc_gc_client_fixer', NULL)) {
-        $uri = 'http://data.fixer.io/api/latest?access_key=' . $fixer . '&symbols=' . $default_currency;
-
-        $options = array(
-          'headers' => array('Content-Type' => 'application/json'),
-          'method' => 'GET',
-        );
-        $result = drupal_http_request($uri, $options);
-
-        if (isset($result->error)) {
-          drupal_set_message(t('We were unable to obtain a currency exchange rate at this time'), 'warning');
-        }
-        else {
-          $data = json_decode($result->data);
-          $exchange_rate = $data->rates->$default_currency;
-          if ($default_currency == 'EUR') {
-            $amount = $amount * $exchange_rate;
-          }
-          else {
-            $amount = $amount / $exchange_rate;
-          }
-
-          drupal_set_message(t('The amount for your purchase has been converted into @sign using current exchange rates at fixer.io', array('@sign' => $currency_arr['sign'])));
-        }
+      $params = array(
+        'endpoint' => 'currency_exchange_rates',
+        'action' => 'list',
+        'source' => $default_currency,
+        'target' => $currency_arr['currency'],
+      );
+      $result = uc_gc_client_api($params);
+      if (!isset($result->response)) {
+        drupal_set_message(t("We were unable to obtain a currency exchange rate for '@title' at this time", array(
+          '@title' => $product->title,
+        )), 'warning');
       }
       else {
-        drupal_set_message(t('API key is missing for fixer.io'), 'warning');
+        $exchange_rates = $result->response->body->currency_exchange_rates;
+        $amount *= $exchange_rates[0]->rate;
+        if ($next_paymentdate && $status) {
+          drupal_set_message(t("The amount for '@title' has been converted to @amount using the real currency exchange rates provided by GoCardless.", array(
+            '@amount' => uc_currency_format($amount, $currency_arr['sign']),
+            '@title' => $product->title,
+          )));
+        }
       }
-
       $calcs_array['currency'] = $currency_arr['currency'];
       $calcs_array['sign'] = $currency_arr['sign'];
+      $calcs_array['region'] = $currency_arr['region'];
     }
   }
   $calcs_array['name'] = 'Payment for Order #' . $order->order_id;
@@ -1197,7 +1258,7 @@ function uc_gc_client_uc_order_cancel($order) {
   $result = uc_gc_client_api($params);
 
   if (!isset($result->response)) {
-    drupal_set_message(t('Something went wrong cancelling GoCardless direct debit mandate @ucid. Please try again or contact the site administrator for assistance.', array('@ucid' => $gc_client->gcid)), 'error');
+    drupal_set_message(t('Something went wrong cancelling GoCardless debit mandate @ucid. Please try again or contact the site administrator for assistance.', array('@ucid' => $gc_client->gcid)), 'error');
   }
   elseif ($result->response->status_code == 200) {
     // Update status on database for all products in order.
@@ -1211,7 +1272,7 @@ function uc_gc_client_uc_order_cancel($order) {
 
     $comment = t('Order @order_id cancelled by customer.', array('@order_id' => $order->order_id));
     uc_order_comment_save($order->order_id, $order->uid, $comment, 'order', 'Canceled', TRUE);
-    drupal_set_message(t('Your GoCardless direct debit mandate @ucid has been cancelled, and you will receive an email confirmation.', array('@ucid' => $gc_client->gcid)));
+    drupal_set_message(t('Your GoCardless debit mandate @ucid has been cancelled, and you will receive an email confirmation.', array('@ucid' => $gc_client->gcid)));
   }
 }
 
@@ -1292,6 +1353,7 @@ function uc_gc_client_currency($country_code) {
     return array(
       'currency' => $countries[$country_code]['currency'],
       'sign' => $countries[$country_code]['sign'],
+      'region' => $countries[$country_code]['region'],
     );
   }
   else {
@@ -1331,216 +1393,252 @@ function uc_gc_client_countries_define() {
       'region' => 'bacs',
       'currency' => 'GBP',
       'sign' => '£',
+      'instant_payments' => '1',
       'enabled' => '1',
     ),
     'SE' => array(
       'region' => 'autogiro',
       'currency' => 'SEK',
       'sign' => 'kr',
+      'instant_payments' => '0',
       'enabled' => '0',
     ),
     'AU' => array(
       'region' => 'becs',
       'currency' => 'AUD',
       'sign' => '$',
+      'instant_payments' => '0',
       'enabled' => '0',
     ),
     'DK' => array(
       'region' => 'betalingsservice',
       'currency' => 'DKK',
       'sign' => 'kr',
+      'instant_payments' => '0',
       'enabled' => '0',
     ),
     'NZ' => array(
       'region' => 'becs_nz',
       'currency' => 'NZD',
       'sign' => '$',
+      'instant_payments' => '0',
       'enabled' => '0',
     ),
     'US' => array(
       'region' => 'ach',
       'currency' => 'USD',
       'sign' => '$',
+      'instant_payments' => '0',
       'enabled' => '0',
     ),
     'AX' => array(
       'region' => 'sepa_core',
       'currency' => 'EUR',
       'sign' => '€',
+      'instant_payments' => '0',
       'enabled' => '0',
     ),
     'AT' => array(
       'region' => 'sepa_core',
       'currency' => 'EUR',
       'sign' => '€',
+      'instant_payments' => '0',
       'enabled' => '0',
     ),
     'BE' => array(
       'region' => 'sepa_core',
       'currency' => 'EUR',
       'sign' => '€',
+      'instant_payments' => '0',
       'enabled' => '0',
     ),
     'CY' => array(
       'region' => 'sepa_core',
       'currency' => 'EUR',
       'sign' => '€',
+      'instant_payments' => '0',
       'enabled' => '0',
     ),
     'EE' => array(
       'region' => 'sepa_core',
       'currency' => 'EUR',
       'sign' => '€',
+      'instant_payments' => '0',
       'enabled' => '0',
     ),
     'FI' => array(
       'region' => 'sepa_core',
       'currency' => 'EUR',
       'sign' => '€',
+      'instant_payments' => '0',
       'enabled' => '0',
     ),
     'FR' => array(
       'region' => 'sepa_core',
       'currency' => 'EUR',
       'sign' => '€',
+      'instant_payments' => '0',
       'enabled' => '0',
     ),
     'GF' => array(
       'region' => 'sepa_core',
       'currency' => 'EUR',
       'sign' => '€',
+      'instant_payments' => '0',
       'enabled' => '0',
     ),
     'DE' => array(
       'region' => 'sepa_core',
       'currency' => 'EUR',
       'sign' => '€',
+      'instant_payments' => '1',
       'enabled' => '0',
     ),
     'GR' => array(
       'region' => 'sepa_core',
       'currency' => 'EUR',
       'sign' => '€',
+      'instant_payments' => '0',
       'enabled' => '0',
     ),
     'GP' => array(
       'region' => 'sepa_core',
       'currency' => 'EUR',
       'sign' => '€',
+      'instant_payments' => '0',
       'enabled' => '0',
     ),
     'IE' => array(
       'region' => 'sepa_core',
       'currency' => 'EUR',
       'sign' => '€',
+      'instant_payments' => '0',
       'enabled' => '0',
     ),
     'IT' => array(
       'region' => 'sepa_core',
       'currency' => 'EUR',
       'sign' => '€',
+      'instant_payments' => '0',
       'enabled' => '0',
     ),
     'LV' => array(
       'region' => 'sepa_core',
       'currency' => 'EUR',
       'sign' => '€',
+      'instant_payments' => '0',
       'enabled' => '0',
     ),
     'LT' => array(
       'region' => 'sepa_core',
       'currency' => 'EUR',
       'sign' => '€',
+      'instant_payments' => '0',
       'enabled' => '0',
     ),
     'LU' => array(
       'region' => 'sepa_core',
       'currency' => 'EUR',
       'sign' => '€',
+      'instant_payments' => '0',
       'enabled' => '0',
     ),
     'MT' => array(
       'region' => 'sepa_core',
       'currency' => 'EUR',
       'sign' => '€',
+      'instant_payments' => '0',
       'enabled' => '0',
     ),
     'MQ' => array(
       'region' => 'sepa_core',
       'currency' => 'EUR',
       'sign' => '€',
+      'instant_payments' => '0',
       'enabled' => '0',
     ),
     'YT' => array(
       'region' => 'sepa_core',
       'currency' => 'EUR',
       'sign' => '€',
+      'instant_payments' => '0',
       'enabled' => '0',
     ),
     'MC' => array(
       'region' => 'sepa_core',
       'currency' => 'EUR',
       'sign' => '€',
+      'instant_payments' => '0',
       'enabled' => '0',
     ),
     'NL' => array(
       'region' => 'sepa_core',
       'currency' => 'EUR',
       'sign' => '€',
+      'instant_payments' => '0',
       'enabled' => '0',
     ),
     'PT' => array(
       'region' => 'sepa_core',
       'currency' => 'EUR',
       'sign' => '€',
+      'instant_payments' => '0',
       'enabled' => '0',
     ),
     'RE' => array(
       'region' => 'sepa_core',
       'currency' => 'EUR',
       'sign' => '€',
+      'instant_payments' => '0',
       'enabled' => '0',
     ),
     'BL' => array(
       'region' => 'sepa_core',
       'currency' => 'EUR',
       'sign' => '€',
+      'instant_payments' => '0',
       'enabled' => '0',
     ),
     'MF' => array(
       'region' => 'sepa_core',
       'currency' => 'EUR',
       'sign' => '€',
+      'instant_payments' => '0',
       'enabled' => '0',
     ),
     'PM' => array(
       'region' => 'sepa_core',
       'currency' => 'EUR',
       'sign' => '€',
+      'instant_payments' => '0',
       'enabled' => '0',
     ),
     'SM' => array(
       'region' => 'sepa_core',
       'currency' => 'EUR',
       'sign' => '€',
+      'instant_payments' => '0',
       'enabled' => '0',
     ),
     'SK' => array(
       'region' => 'sepa_core',
       'currency' => 'EUR',
       'sign' => '€',
+      'instant_payments' => '0',
       'enabled' => '0',
     ),
     'SI' => array(
       'region' => 'sepa_core',
       'currency' => 'EUR',
       'sign' => '€',
+      'instant_payments' => '0',
       'enabled' => '0',
     ),
     'ES' => array(
       'region' => 'sepa_core',
       'currency' => 'EUR',
       'sign' => '€',
+      'instant_payments' => '0',
       'enabled' => '0',
     ),
   );

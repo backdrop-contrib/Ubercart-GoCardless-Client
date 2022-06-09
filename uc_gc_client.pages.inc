@@ -6,7 +6,171 @@
  */
 
 /**
- * Menu callback; completes an order on redirection back from GoCardless.
+ * Menu callback; upon return from a GoCardless Billing Request Flow.
+ *
+ * @param int $order_id
+ *   The Ubercart Order ID.
+ * @param string $request_id
+ *   The Billing Request ID supplied by GoCardless.
+ */
+function uc_gc_client_billing_request($order_id, $request_id) {
+  if (intval($_SESSION['cart_order']) != $order_id) {
+    drupal_set_message(t('Thank you for your order! GoCardless will notify us once your payment has been processed.'));
+    drupal_goto('cart');
+  }
+
+  // Ensure the payment method is GoCardless.
+  $order = uc_order_load($order_id);
+  if ($order->payment_method != 'gc_client') {
+    drupal_goto('cart');
+  }
+
+  // Call the GoC API to get customer ID and mandate ID if there is one.
+  $uid = $order->uid;
+  $data = array(
+    'endpoint' => 'billing_request',
+    'action' => 'get',
+    'id' => $request_id,
+  );
+  $result = uc_gc_client_post($data);
+  if (isset($result->response)) {
+    $billing_request = $result->response->body->billing_requests;
+    $mandate_id = NULL;
+    if (isset($billing_request->links->mandate_request_mandate)) {
+      $mandate_id = $billing_request->links->mandate_request_mandate;
+      $comment = t('Your new debit mandate @mandate has been created by GoCardless.', array(
+        '@mandate' => $mandate_id,
+      ));
+      uc_order_comment_save($order_id, $uid, $comment, 'order', 'Pending', TRUE);
+      drupal_set_message($comment);
+    }
+    $customer_id = NULL;
+    if (isset($billing_request->links->customer)) {
+      $customer_id = $billing_request->links->customer;
+    }
+  }
+  else {
+    drupal_set_message(t('Something went wrong with your order! Please contact the site administrator.'), 'error');
+    drupal_goto('cart');
+  }
+
+  // Process the Instant Payment that has been created.
+  if (isset($billing_request->payment_request)) {
+    $payment = $billing_request->payment_request;
+    $payment_amount = $payment->amount / 100;
+    $country_code = $billing_request->resources->customer_bank_account->country_code;
+    $currency_symbol = uc_gc_client_currency($country_code)['sign'];
+    $payment_comment = t('GoCardless @payment_type payment ID @payment_id created.', array(
+      '@payment_id' => $billing_request->payment_request->links->payment,
+      '@payment_type' => $billing_request->fallback_occurred ? 'One-off' : 'Instant', 
+    ));
+    if (!$billing_request->fallback_occurred) { 
+      $order_comment = t('You have made an Instant payment of @amount via GoCardless for your order #@order_id.', array(
+        '@order_id' => $order_id,
+        '@amount' => uc_currency_format($payment_amount, $currency_symbol),
+      ));
+    }
+    else {
+      $order_comment = t('A payment of @amount has been created via GoCardless with your debit mandate and will be paid from your bank account in 3-4 working days.', array(
+        '@amount' => uc_currency_format($payment_amount, $currency_symbol),
+      ));
+    }
+
+    // uc_payment_enter() will set the order status to "Completed" so should
+    // only be used if there is no mandate creation. Otherwise the payment
+    // needs adding to the database here.
+    $data = serialize(array('payment_id' => $billing_request->payment_request->links->payment));
+    if (!$mandate_id) {
+      uc_payment_enter($order_id, 'gc_client', $order->order_total, $uid, $data, $payment_comment);
+    }
+    else {
+      db_insert('uc_payment_receipts')
+        ->fields(array(
+          'order_id' => $order_id,
+          'method' => 'gc_client',
+          'amount' => $order->order_total,
+          'uid' => $uid,
+          'data' => $data,
+          'comment' => $payment_comment,
+          'received' => REQUEST_TIME,
+        ))
+        ->execute();
+    }
+    uc_order_comment_save($order_id, $uid, $order_comment, 'order', 'Completed', TRUE);
+    drupal_set_message($order_comment);
+  }
+
+  // Process any One-off payments if required.
+  foreach ($order->products as $product) {
+    if ($product->data['gc_auth_type'] == 'payment') {
+      // Save GoCardless data about the order-product.
+      $created = REQUEST_TIME;
+      $data = array(
+        'ucid'   => $order_id,
+        'ucpid'  => $product->order_product_id,
+        'gcid'   => $mandate_id,
+        'gcrid'  => $request_id,
+        'gccid'  => $customer_id,
+        'uid'    => $uid,
+        'type'   => 'P',
+        'status' => 'pending',
+        'created' => $created,
+        'start_date' => $created,
+        'updated' => $created,
+        'sandbox' => variable_get('uc_gc_client_sandbox', TRUE),
+      );
+      db_insert('uc_gc_client')
+        ->fields($data)
+        ->execute();
+
+      // Update the next payment creation date and tell customer. 
+      if ($interval_params = isset($product->data['interval_params']) ? $product->data['interval_params'] : NULL) {
+        $string = '+' . $interval_params['string'];
+        $next_payment = strtotime($string, $created);
+
+        // Provide a hook so that next_payment can be altered by another module.
+        drupal_alter('billing_request_next_payment', $next_payment, $order);
+
+        db_update('uc_gc_client')
+          ->fields(array(
+            'next_payment' => $next_payment,
+            'next_payment_uuid' => NULL,
+          ))
+          ->condition('ucpid', $product->order_product_id)
+          ->execute();
+
+        // Inform customer about next scheduled payment.
+        $calculate = uc_gc_client_price_calculate($order, $product->order_product_id, NULL, NULL);
+        $message = t("The next recurring payment of @amount for '@product_title' has been scheduled for @next_payment_date.", array(
+          '@amount' => uc_currency_format($calculate['amount'], $currency_symbol),
+          '@product_title' => $product->title,
+          '@next_payment_date' => format_date($next_payment, 'uc_store'),
+        ));
+        drupal_set_message($message);
+        uc_order_comment_save($order_id, $uid, $message, 'order', 'Completed', TRUE);
+      }
+    }
+  }
+
+  // This lets us know it's a legitimate access of the complete page.
+  $_SESSION['uc_checkout'][$_SESSION['cart_order']]['do_complete'] = TRUE;
+  drupal_goto('cart/checkout/complete');
+}
+
+/**
+ * Menu callback; return user to Checkout page after using the GoC Exit link.
+ *
+ *   The exit link is presented to customers by GoCardless if they cannot
+ *   find their bank account while making an Instant Payment. They are also
+ *   presented with an option to continue by creating a debit.
+ */
+function uc_gc_client_billing_request_exit() {
+  drupal_set_message(t('We are sorry but it looks like Instant Payments are not available for your bank. Please try again using the option to pay by debit. If you are unable to do this then contact the site administrator for further assistance.'), 'warning');
+  drupal_goto('cart/checkout');
+}
+
+/**
+ * Menu callback; upon return from a GoCardless Redirect Flow.
  *
  * @param string $redirect
  *   The Redirect ID supplied by GoCardless.
@@ -24,19 +188,21 @@
  *   The Ubercart Cart ID for the order.
  */
 function uc_gc_client_redirect($redirect, $mandate, $customer, $order_id, $payment_method, $start_date = NULL, $cart_id = 0) {
+
   if (intval($_SESSION['cart_order']) != $order_id) {
     drupal_set_message(t('Thank you for your order! GoCardless will notify us once your payment has been processed.'));
     drupal_goto('cart');
   }
+
   // Ensure the payment method is GoCardless.
-  if ($payment_method != 'gc_client') {
+  $order = uc_order_load($order_id);
+  if ($order->payment_method != 'gc_client') {
     drupal_goto('cart');
   }
-  $order = uc_order_load($order_id);
-  $uid = $order->uid;
 
   // Let customer know mandate has been created.
-  $comment = t('Your new direct debit mandate @mandate has been created by GoCardless.', array('@mandate' => $mandate));
+  $uid = $order->uid;
+  $comment = t('Your new debit mandate @mandate has been created by GoCardless.', array('@mandate' => $mandate));
   uc_order_comment_save($order_id, $uid, $comment, 'order', 'Pending', TRUE);
   drupal_set_message($comment);
 
@@ -46,42 +212,13 @@ function uc_gc_client_redirect($redirect, $mandate, $customer, $order_id, $payme
     $ucpid = $product->order_product_id;
     $product->data['gc_auth_type'] == 'subscription' ? $gc_type = 'S' : $gc_type = 'P';
 
-    // Obtain start date.
     $product_uc = db_select('uc_gc_client_products', 'p')
       ->fields('p')
       ->condition('nid', $product->nid)
       ->execute()->fetch();
 
-    if ($product_uc->raise_payment) {
-      $start_date = REQUEST_TIME;
-    }
-    else {
-      // TODO should this be >= $next_possible_charge_date ?
-      if ($product_uc->start_date >= REQUEST_TIME) {
-        $start_date = $product_uc->start_date;
-      }
-      else {
-        if (variable_get('uc_gc_client_dom')) {
-          $start_date = uc_gc_client_start_date();
-        }
-        else {
-          $start_date = NULL;
-        }
-      }
-      if ($start_date) {
-        $params = array(
-          'endpoint' => 'mandates',
-          'action' => 'get',
-          'mandate' => $mandate,
-        );
-        $result = uc_gc_client_api($params);
-        $next_possible_charge_date = $result->response->body->mandates->next_possible_charge_date;
-
-        if ($start_date < strtotime($next_possible_charge_date)) {
-          $start_date = strtotime($next_possible_charge_date);
-        }
-      }
-    }
+    // Obtain start date.
+    $start_date = uc_gc_client_start_date($product_uc);
 
     // Insert info about the order into the database.
     $created = REQUEST_TIME;
@@ -212,7 +349,7 @@ function uc_gc_client_redirect($redirect, $mandate, $customer, $order_id, $payme
         if ($result->response->status_code == 201) {
           // Update next_payment field in gc_client table.
           $payment = $result->response->body->payments;
-          isset($interval) ? $next_payment = strtotime('+' . $interval['string']) : $next_payment = NULL;
+          $next_payment = isset($interval) ? strtotime('+' . $interval['string']) : NULL;
           db_update('uc_gc_client')
             ->fields(array(
               'next_payment' => $next_payment,
@@ -286,6 +423,61 @@ function uc_gc_client_redirect($redirect, $mandate, $customer, $order_id, $payme
   // This lets us know it's a legitimate access of the complete page.
   $_SESSION['uc_checkout'][$_SESSION['cart_order']]['do_complete'] = TRUE;
   drupal_goto('cart/checkout/complete');
+}
+
+/**
+ * Returns a start date for one-off or subscription payments.
+ *
+ * @param object $product_uc
+ *   The Ubercart Product GoCardless configuration data.
+ *
+ * @return mixed
+ *   The start date as a Unix timestamp, or NULL.
+ */
+function uc_gc_client_start_date($product_uc) {
+  if ($product_uc->raise_payment) {
+    $start_date = REQUEST_TIME;
+  }
+  else {
+    // TODO should this be >= $next_possible_charge_date ?
+    if ($product_uc->start_date >= REQUEST_TIME) {
+      $start_date = $product_uc->start_date;
+    }
+    else {
+      // Get the first available day of month if configurred. 
+      if (variable_get('uc_gc_client_dom')) {
+        $doms = variable_get('uc_gc_client_dom');
+        if (!empty($doms)) {
+          $est_charge_date = uc_gc_client_working_days_calculate('+', 4, date('Y-m-d'));
+          $doms = explode(', ', $doms);
+          $dates = array();
+          foreach ($doms as $dom) {
+            $dom >= date('d', strtotime($est_charge_date)) ? $month = 'last' : $month = 'this';
+            $time = strtotime('+' . $dom . ' days', strtotime('last day of ' . $month . ' month'));
+            $dates[] = $time;
+          }
+          sort($dates);
+          $start_date = array_shift($dates);
+        }
+      }
+      else {
+        $start_date = NULL;
+      }
+    }
+    if ($start_date) {
+      $params = array(
+        'endpoint' => 'mandates',
+        'action' => 'get',
+        'mandate' => $mandate,
+      );
+      $result = uc_gc_client_api($params);
+      $next_possible_charge_date = $result->response->body->mandates->next_possible_charge_date;
+      if ($start_date < strtotime($next_possible_charge_date)) {
+        $start_date = strtotime($next_possible_charge_date);
+      }
+    }
+  }
+  return $start_date;
 }
 
 /**
@@ -363,9 +555,10 @@ function uc_gc_client_webhook() {
 
         case 'mandates':
           $order_id = uc_gc_client_id($event['links']['mandate']);
-          $order = uc_order_load($order_id);
-          $resource = array();
-          uc_gc_client_webhook_mandates($order, $event['action'], $event);
+          if ($order = uc_order_load($order_id)) {
+            $resource = array();
+            uc_gc_client_webhook_mandates($order, $event['action'], $event);
+          }
           break;
 
         case 'subscriptions':
@@ -383,10 +576,17 @@ function uc_gc_client_webhook() {
             'id' => $payment_id,
           );
           $result = uc_gc_client_api($params);
-          $resource = $result->response->body->payments;
-          $order_id = uc_gc_client_id($resource->links->mandate);
-          $order = uc_order_load($order_id);
-          uc_gc_client_webhook_payments($order, $event['action'], $event, $resource);
+          if (isset($result->response)) {
+            $resource = $result->response->body->payments;
+            $order_id = uc_gc_client_id($resource->links->mandate);
+            if ($order = uc_order_load($order_id)) {
+              uc_gc_client_webhook_payments($order, $event['action'], $event, $resource);
+            }
+            else {
+              $order_id = TRUE;
+              uc_gc_client_webhook_instant_payments($event['action'], $event, $resource);
+            }
+          }  
           break;
 
         default:
@@ -420,7 +620,7 @@ function uc_gc_client_webhook_mandates($order, $action, array $event) {
 
     case 'submitted':
       if ($order->order_status <> 'processing') {
-        $comment = t('Your direct debit mandate @mandate has been submitted to your bank by GoCardless and will be processed soon.', array('@mandate' => $event['links']['mandate']));
+        $comment = t('Your debit mandate @mandate has been submitted to your bank by GoCardless and will be processed soon.', array('@mandate' => $event['links']['mandate']));
         uc_order_comment_save($order->order_id, $order->uid, $comment, 'order', 'processing', FALSE);
         uc_order_update_status($order->order_id, 'processing');
         // Update the status on the database for all products in this order.
@@ -436,7 +636,7 @@ function uc_gc_client_webhook_mandates($order, $action, array $event) {
 
     case 'failed':
       if ($order->order_status <> 'mandate_failed') {
-        $comment = t('Your direct debit mandate @mandate creation has failed.', array('@mandate' => $event['links']['mandate']));
+        $comment = t('Your debit mandate @mandate creation has failed.', array('@mandate' => $event['links']['mandate']));
         uc_order_comment_save($order->order_id, $order->uid, $comment, 'order', 'processing', TRUE);
 
         uc_order_update_status($order->order_id, 'mandate_failed');
@@ -445,7 +645,7 @@ function uc_gc_client_webhook_mandates($order, $action, array $event) {
 
     case 'active':
       if ($order->order_status <> 'mandate_active') {
-        $comment = t('Your direct debit mandate @mandate has been set up successfully with your bank.', array('@mandate' => $event['links']['mandate']));
+        $comment = t('Your debit mandate @mandate has been set up successfully with your bank.', array('@mandate' => $event['links']['mandate']));
         uc_order_comment_save($order->order_id, $order->uid, $comment, 'order', 'Completed', TRUE);
         uc_order_update_status($order->order_id, 'mandate_active');
         db_update('uc_gc_client')
@@ -460,7 +660,7 @@ function uc_gc_client_webhook_mandates($order, $action, array $event) {
 
     case 'cancelled':
       if ($order->order_status <> 'canceled') {
-        $comment = t('Your direct debit mandate @mandate has been cancelled with your bank by GoCardless.', array('@mandate' => $event['links']['mandate']));
+        $comment = t('Your debit mandate @mandate has been cancelled with your bank by GoCardless.', array('@mandate' => $event['links']['mandate']));
         uc_order_comment_save($order->order_id, $order->uid, $comment, 'order', 'canceled', TRUE);
 
         uc_order_update_status($order->order_id, 'canceled');
@@ -476,7 +676,7 @@ function uc_gc_client_webhook_mandates($order, $action, array $event) {
 
     case 'reinstated':
       if ($order->order_status <> 'processing') {
-        $comment = t('Your direct debit mandate @mandate has been reinstated at GoCardless.', array('@mandate' => $event['links']['mandate']));
+        $comment = t('Your debit mandate @mandate has been reinstated at GoCardless.', array('@mandate' => $event['links']['mandate']));
         uc_order_comment_save($order->order_id, $order->uid, $comment, 'order', 'processing', FALSE);
         uc_order_update_status($order->order_id, 'processing');
         db_update('uc_gc_client')
@@ -516,7 +716,7 @@ function uc_gc_client_webhook_payments($order, $action, array $event, $resource)
 
   switch ($action) {
     case 'confirmed':
-      uc_payment_enter($order_id, 'gc_client', $amount, 0, NULL, t('Direct debit has been taken by GoCardless'));
+      uc_payment_enter($order_id, 'gc_client', $amount, 0, NULL, t('Debit payment has been taken by GoCardless'));
       $comment = t('Your payment of @amount has been confirmed by GoCardless and will be paid from your bank account.', array('@amount' => uc_currency_format($amount, $currency_sign)));
       uc_order_comment_save($order_id, 0, $comment, 'order', $status, TRUE);
       // Update status to payment_received if it is the first one.
@@ -526,12 +726,55 @@ function uc_gc_client_webhook_payments($order, $action, array $event, $resource)
       break;
 
     case 'cancelled':
-      $comment = t("Your direct debit payment '@id' for @amount has been cancelled at GoCardless.", array(
+      $comment = t("Your debit payment '@id' for @amount has been cancelled at GoCardless.", array(
         '@id' => $event['id'],
         '@amount' => uc_currency_format($amount, $currency_sign),
       ));
       uc_order_comment_save($order_id, 0, $comment, 'order', $status, TRUE);
       break;
+  }
+}
+
+/**
+ * Processes 'payments' webhooks for Instant Payments.
+ *
+ * @param string $action
+ *   The action type of GoCardless webhook event.
+ * @param array $event
+ *   The GoCardless webhook event.
+ * @param object $resource
+ *   The GoCardless payment resource that the webhook pertains to.
+ */
+function uc_gc_client_webhook_instant_payments($action, array $event, $resource) {
+  if (isset($resource->metadata->order_id)) {
+    $payment_receipts = db_select('uc_payment_receipts', 'p')
+      ->fields('p')
+      ->condition('order_id', $resource->metadata->order_id)
+      ->execute()->fetchAll();
+    foreach ($payment_receipts as $receipt) {
+      $data = unserialize($receipt->data);
+      if (isset($data['payment_id']) && $data['payment_id'] == $resource->id) {
+
+        switch ($action) {
+          case 'failed':
+            $comment = t('Payment ID @payment_id has failed with the following reason: "@reason".', array(
+              '@reason' => $event['details']['description'],
+              '@payment_id' => $resource->id, 
+            ));            
+            db_update('uc_payment_receipts')
+              ->fields(array(
+                'amount' => 0,
+                'comment' => $receipt->comment . '<br />' . $comment,
+              ))
+              ->condition('receipt_id', $receipt->receipt_id)
+              ->execute();
+
+            uc_order_update_status($resource->metadata->order_id, 'gocardless_payment_failed');
+            uc_order_comment_save($resource->metadata->order_id, 0, $comment, 'order', 'Completed', TRUE);
+            break;
+        }
+      }
+    }
   }
 }
 

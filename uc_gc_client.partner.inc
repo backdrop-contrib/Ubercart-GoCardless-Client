@@ -22,14 +22,9 @@ function uc_gc_client_get() {
     'Cookie' => $_SESSION['uc_gc_client_cookie'],
     'X-CSRF-Token' => $_SESSION['uc_gc_client_token'],
   );
-  variable_get('uc_gc_client_sandbox') ? $data['environment'] = 'SANDBOX' : $data['environment'] = 'LIVE';
-  variable_get('uc_gc_client_sandbox') ? $ext = '_sandbox' : $ext = '_live';
-
-  $data = drupal_json_encode($data);
-  $options['data'] = $data;
-  $options['method'] = 'GET';
-  $url = variable_get('uc_gc_client_partner_url') . '/gc/client/' . variable_get('uc_gc_client_org_id' . $ext);
-
+  $env = variable_get('uc_gc_client_sandbox') ? 'SANDBOX' : 'LIVE';
+  $ext = variable_get('uc_gc_client_sandbox') ? '_sandbox' : '_live';
+  $url = variable_get('uc_gc_client_partner_url') . '/gc/client/' . variable_get('uc_gc_client_org_id' . $ext) . '/' . $env;
   $response = drupal_http_request($url, $options);
   $data = json_decode($response->data);
   return $data;

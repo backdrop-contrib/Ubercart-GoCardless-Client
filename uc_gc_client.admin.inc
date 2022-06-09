@@ -79,6 +79,9 @@ function uc_gc_client_uc_payment_method_callback($op, &$order, $form = NULL, &$f
           $creditors = $result->response->body->creditors;
           if (!empty($creditors)) {
             $creditor = array_shift($creditors);
+            if ($creditor->fx_payout_currency) {
+              $fx_enabled = TRUE;
+            }
             if ($creditor->verification_status == 'successful') {
               $verified_markup = '<div class="messages status">' . t('Your GoCardless account is verified.') .  '</div>';
             }
@@ -156,7 +159,7 @@ function uc_gc_client_uc_payment_method_callback($op, &$order, $form = NULL, &$f
         '#default_value' => variable_get('uc_gc_client_dom'),
         '#size' => 25,
         '#maxlength' => 24,
-        '#description' => t('Enter one or more days of the month, upon which direct debits will start. The system will automatically choose the next available date from those you have provided. Values must be seperated by a comma.<br />These values will be ignored if there is a valid Start Date set for individual products, or if they are set to create a payment immediately.'),
+        '#description' => t('Enter one or more days of the month, upon which debit payments will start. The system will automatically choose the next available date from those you have provided. Values must be seperated by a comma.<br />These values will be ignored if there is a valid Start Date set for individual products, or if they are set to create a payment immediately.'),
         '#required' => FALSE,
       );
       $form['global']['uc_gc_client_payments_tab'] = array(
@@ -165,24 +168,17 @@ function uc_gc_client_uc_payment_method_callback($op, &$order, $form = NULL, &$f
         '#default_value' => variable_get('uc_gc_client_payments_tab'),
         '#description' => t('Ubercart Payments do not work with GoCardless, so checking this will hide the Payments tab when viewing any orders created through GoCardless.'),
       );
+      $currencies_description = '<p>' . t("If you use this option, mandates and payments will be created in the appropriate currency based on the country provided by the customer in their billing address. The payment amount for customers using the non-default store currency will be automatically adjusted using current real exchange rates provided by the GoCardless API. You must use <a href='/admin/store/settings/countries/gocardless'>this form</a> to set which countries can be used with GoCardless during checkout. Do not use this option if your store is set up to use multiple currencies anyway. To create payments in foreign currencies you must either enable the appropriate scheme(s), or anable FX payments for your GoCardless account. Enabling FX payments will allow you to collect payments in all the currencies covered by GoCardless. To enable these you need to contact help@gocardless.com.") . '</p>';
+      if ($connected) {
+        $currencies_description .= '<p>' . t("FX payments are currently <em>@fx_state</em> in your GoCardless account.", array(
+          '@fx_state' => isset($fx_enabled) ? 'enabled' : 'disabled',
+        )) . '</p>';
+      }
       $form['global']['uc_gc_client_currencies'] = array(
         '#type' => 'checkbox',
         '#title' => t('Create payments in foreign currencies'),
         '#default_value' => variable_get('uc_gc_client_currencies'),
-        '#description' => t("Use foreign currency, and adjust payment amount for international customers, according to current exchange rates at <a target='new' href='http://fixer.io'>fixer.io</a>. This only applies when the currency of the customer's country is different to the store's default currency. SEPA and /or AutoGiro regions need to be enabled on your GoCardless account for this to work."),
-      );
-      $form['global']['uc_gc_client_fixer'] = array(
-        '#type' => 'textfield',
-        '#title' => t('fixer.io'),
-        '#default_value' => variable_get('uc_gc_client_fixer', NULL),
-        '#description' => t('API key for fixer.io'),
-        '#size' => 40,
-        '#maxlength' => 40,
-        '#states' => array(
-          'visible' => array(
-            'input[name="uc_gc_client_currencies"]' => array('checked' => TRUE),
-          ),
-        ),
+        '#description' => $currencies_description,
       );
 
       // Payments.
@@ -279,10 +275,6 @@ function uc_gc_client_uc_payment_method_callback($op, &$order, $form = NULL, &$f
           drupal_set_message(t('Connection with GoCardless has failed'), 'error');
         }
       }
-      //else {
-      //  drupal_set_message(t('Connection with GoCardless has failed'), 'error');
-      //}
-
       $form['#submit'][] = 'uc_gc_client_admin_validate';
       return $form;
   }
@@ -330,7 +322,7 @@ function uc_gc_client_admin_validate(&$form, &$form_state) {
     $doms = $form['gc_client_dom']['#value'];
     $regex = "/^[0-9, ]+$/";
     if (!preg_match($regex, $doms)) {
-      form_set_error('uc_gc_client_dom', t('Only positve integers and commas please'));
+      form_set_error('uc_gc_client_dom', t('Only positve integers and commas please.'));
     }
     // Remove spaces.
     $doms = str_replace(' ', '', $doms);
@@ -374,7 +366,8 @@ function uc_gc_client_connect_submit($form, $form_state) {
       'mail' => variable_get('site_mail', ''),
       'client_url' => $client_url,
       'token' => $token,
-      'module' => 'Ubercart 7.x',
+      'module' => 'Ubercart 7.x-2.x',
+      'site_email' => variable_get('site_mail'),
     ),
   ));
 }
@@ -422,28 +415,39 @@ function uc_gc_client_form_node_form_alter(&$form, $form_state, $form_id) {
         ),
       ),
     );
-    $options = array('S' => t('Subscription'), 'P' => t('One-off payments'));
+    $options = array(
+      'I' => t('Instant non-recurring payment'),
+      'S' => t('Subscription'),
+      'P' => t('One-off payments'),
+    );
     $form['gc']['gc_type'] = array(
       '#type' => 'select',
-      '#title' => t('Type'),
-      '#default_value' => isset($defaults['type']) ? $defaults['type'] : NULL,
+      '#title' => t('Payment type'),
       '#options' => $options,
-      "#empty_option" => t('- None -'),
-      '#description' => t('Select the type that will be used for new GoCardless orders.<br />If none is selected then the default type will be used.'),
+      '#default_value' => isset($defaults['type']) ? $defaults['type'] : NULL,
+      '#description' => t("<p>Select the payment type that will be used by GoCardless for this product.</p><p>Instant non-recurring payments are single payments created upon checkout by GoCardless using open banking protocol and do not require a debit mandate. Open banking does not require credit/debit cards but the experience is similar to other online payment services in that the customer is required to provide their bank details, and to verify the bank account.</p><p>Subscription and One-off payments both require a debit mandate, which is created automatically upon checkout. Subscriptions are recurring payments that are created automatically by GoCardless according to the instructions that you provide here. One-off payments are (recurring) payments that are created automatically when your website instructs GoCardless to do so, and are more flexible than Subscription payments. Debit payments take several days to complete following an instruction from GoCardless to the bank to create the payment.</p><p>Instant payments are only created if none of the products in a cart are using recurrence rules, <i>or</i> if they are One-off payments that are configured to 'Raise payment immediately' upon checkout. Instant payments are currenly only available in the UK and Germany. If it is not possible to create an Instant payment upon checkout, a debit mandate will be created instead, and the product will be paid for with a One-off payment.</p>"),
       '#weight' => 0,
     );
-    $form['gc']['interval_length'] = array(
+    $form['gc']['container'] = array(
+      '#type' => 'container',
+      '#states' => array(
+        'invisible' => array(
+          'select[name="gc_type"]' => array('value' => 'I'),
+        ),
+      ),
+    );
+    $form['gc']['container']['interval_length'] = array(
       '#type' => 'textfield',
       '#title' => t('Interval length between payments'),
       '#default_value' => isset($defaults['interval_length']) ? $defaults['interval_length'] : NULL,
       '#weight' => 1,
       '#size' => 3,
       '#maxlength' => 3,
-      '#description' => t('The default interval length between direct debit payments. This setting is required for Subscription payments.<br />It can be set for One-off payments, or leave unset if regular payments are not expected.<br />This value will be overridden if the Interval Attribute is set for a product.'),
+      '#description' => t('The default interval length between debit payments. This setting is required for Subscription payments.<br />It can be set for One-off payments, or leave unset if regular payments are not expected.<br />This value will be overridden if the Interval Attribute is set for a product.'),
       '#element_validate' => array('element_validate_integer_positive'),
       '#required' => FALSE,
     );
-    $form['gc']['interval_unit'] = array(
+    $form['gc']['container']['interval_unit'] = array(
       '#type' => 'select',
       '#title' => t('Interval unit between payments'),
       '#default_value' => isset($defaults['interval_unit']) ? $defaults['interval_unit'] : NULL,
@@ -454,10 +458,10 @@ function uc_gc_client_form_node_form_alter(&$form, $form_state, $form_id) {
         'year' => t('year'),
       ),
       "#empty_option" => t('- None -'),
-      '#description' => t('The default interval unit between direct debit payments. This setting is required for Subscription payments.<br />It can be set for One-off payments, or leave unset if regular payments are not expected.<br />This value will be overridden if the Interval attribute is set for a product.'),
+      '#description' => t('The default interval unit between debit payments. This setting is required for Subscription payments.<br />It can be set for One-off payments, or leave unset if regular payments are not expected.<br />This value will be overridden if the Interval attribute is set for a product.'),
       '#required' => FALSE,
     );
-    $form['gc']['price_x'] = array(
+    $form['gc']['container']['price_x'] = array(
       '#type' => 'textfield',
       '#size' => 6,
       '#title' => t('Price multiplier'),
@@ -466,7 +470,7 @@ function uc_gc_client_form_node_form_alter(&$form, $form_state, $form_id) {
       '#weight' => 3,
       '#element_validate' => array('uc_gc_client_element_validate_positive_number'),
     );
-    $form['gc']['raise_payment'] = array(
+    $form['gc']['container']['raise_payment'] = array(
       '#type' => 'checkbox',
       '#prefix' => t('<b>Raise payment immediately</b>'),
       '#weight' => 4,
@@ -474,7 +478,7 @@ function uc_gc_client_form_node_form_alter(&$form, $form_state, $form_id) {
       '#title' => t("Automatically raise a payment upon completion of checkout"),
       '#description' => t('Checking this will override any other settings for raising the initial payment.<br />Leave unchecked if you want another module to handle raising the initial payment.') . '<br /><br />',
     );
-    $form['gc']['start_date'] = array(
+    $form['gc']['container']['start_date'] = array(
       '#title' => t('Start date'),
       '#type' => module_exists('date_popup') ? 'date_popup' : 'date_select',
       '#date_format' => module_exists('date_popup') ? variable_get('date_format_uc_store') : 'd M Y',
@@ -610,7 +614,7 @@ function uc_gc_client_node_view($node, $view_mode, $langcode) {
     if ($extras['start_date']) {
       $start_date = format_date($extras['start_date'], 'uc_store');
       $node->content['start_date'] = array(
-        '#markup' => '<p>' . t('Your first direct debit payment will be paid on') . '<b>' . $start_date . '</b>.</p>',
+        '#markup' => '<p>' . t('Your first debit payment will be paid on') . '<b>' . $start_date . '</b>.</p>',
         '#value' => $start_date,
       );
     }
@@ -650,9 +654,9 @@ function uc_gc_client_countries_form($form, &$form_state) {
   }
   $form = array();
   $form['markup'] = array(
-    '#markup' => '<p>' . t('Countries should first be enabled in Ubercart before they can be enabled / disabled here.') . '</p>',
+    '#markup' => '<p>' . t('Countries must first be enabled in Ubercart before they can be enabled / disabled here.') . '</p>',
   );
-  $header = array('Country', 'Direct debit scheme', 'Currency');
+  $header = array('Country', 'Debit scheme', 'Currency');
   $form['countries'] = array(
     '#type' => 'tableselect',
     '#header' => $header,
@@ -683,5 +687,3 @@ function uc_gc_client_countries_form_submit($form, &$form_state) {
   }
   variable_set('uc_gc_client_countries', $gc_countries);
 }
-
-

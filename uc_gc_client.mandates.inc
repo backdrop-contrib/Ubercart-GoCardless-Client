@@ -18,7 +18,10 @@ function uc_gc_client_payments_form($form, &$form_state, $order) {
     ->execute()->fetchAllAssoc('ucpid');
   $count = count($gcs);
   if ($count == 0) {
-    $no_gcs = 'You have no GoCardless payments associated with this order.';
+    $no_gcs = 'You do not have any recurring payments associated with this order.';
+    if ($order->payment_method == 'gc_client') {
+      $no_gcs .= ' Check the "Payments" tab for details of Instant Payments.';
+    }
     $form['no_orders'] = array(
       '#type' => 'item',
       '#markup' => $no_gcs,
@@ -51,17 +54,19 @@ function uc_gc_client_payments_form($form, &$form_state, $order) {
     );
   }
   else {
-    if (isset($_SESSION['uc_gc_client_change_ucpid_' . $order->order_id])) {
+    if ($form_state['input']) {
+      $ucpid = $form_state['input']['ucpid'];
+    }
+    elseif (isset($_SESSION['uc_gc_client_change_ucpid_' . $order->order_id])) {
       $ucpid = $_SESSION['uc_gc_client_change_ucpid_' . $order->order_id]['ucpid'];
     }
-    elseif (!isset($ucpid)) {
+    else {
       $ucpid = reset($gcs)->ucpid;
     }
     $form = array(
       '#prefix' => '<div id="change-product">',
       '#suffix' => '</div>',
     );
-
     $text_top = '<h3><b>' . t('Administrate <a href = "@url">@title</a>', array(
       '@title' => $product_select[$ucpid],
       '@url' => url('admin/store/orders/' . $order->order_id),
@@ -236,7 +241,7 @@ function uc_gc_client_payments_form($form, &$form_state, $order) {
   $payment_statuses = array('confirmed', 'paid_out');
 
   foreach ($payments as &$payment) {
-    if ($payment->metadata->ucpid != $ucpid) {
+    if (!isset($payment->metadata->ucpid) || $payment->metadata->ucpid != $ucpid) {
       continue;
     }
     if ($payment->status == 'pending_submission') {
@@ -514,7 +519,8 @@ function uc_gc_client_payments_form($form, &$form_state, $order) {
  */
 function uc_gc_client_payments_form_callback(&$form, &$form_state) {
   $order_id = $form_state['values']['order_id'];
-  $_SESSION['uc_gc_client_change_ucpid_' . $order_id]['ucpid'] = $form['ucpid']['#value'];
+  $_SESSION['uc_gc_client_change_ucpid_' . $order_id]['ucpid'] = $form_state['values']['ucpid'];
+  $form['ucpid']['#value'] = $form_state['values']['ucpid'];
   return $form;
 }
 
@@ -814,7 +820,6 @@ function uc_gc_client_create_payment_submit($form, &$form_state) {
   ));
   drupal_set_message(t('@text', array('@text' => $text)));
   uc_order_comment_save($order->order_id, $order->uid, $text, 'order');
-  // TODO.
   $watchdog = t('Order #@order_id:', array(
     '@order_id' => $order->order_id,
   )) . ' ' . $text;
