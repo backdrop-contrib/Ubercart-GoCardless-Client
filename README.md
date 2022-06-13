@@ -1,69 +1,67 @@
-The Name of My Project
-======================
+Ubercart GoCardless Client
+==========================
 
-Foo project enables you to do bar. <!-- The first paragraph of this file should
-be kept short as it will be used as the project summary on backdropcms.org. Aim
-for about 240 characters (three lines at 80 characters each). Do not include a
-table of contents. -->
+The module intergrates Ubercart stores with GoCardless.com, enabling the 
+collection of secure "Instant" and recurring payments at a highly competitive
+rate, in a range of currencies, without depending on expensive credit/debit
+card companies.
 
-<!-- All lines in this file should be no more than 80 characters long for
-legibility, unless including a URL or example that requires the line not wrap.
-(The above line starting with "Foo" is 79 characters for reference.)
 
-Detail in READMEs should be limited to the minimum required for installation and
-getting started. More detailed documentation should be moved to a GitHub wiki
-page, for example, https://github.com/backdrop-contrib/setup/wiki/Documentation. -->
-
-Requirements <!-- Do not include this section if there are no requirements. -->
+Requirements
 ------------
 
 This module requires that the following modules are also enabled:
 
- * [Bar](https://github.com/backdrop-contrib/bar)
- * [Baz](https://github.com/backdrop-contrib/baz)
+ * Ubercart Payment (https://www.drupal.org/project/ubercart)
+ * Ubercart Product Attibutes (https://www.drupal.org/project/ubercart)
 
-Installation <!-- This section is required. -->
+
+Installation
 ------------
 
 - Install this module using the official Backdrop CMS instructions at
   https://docs.backdropcms.org/documentation/extend-with-modules.
 
-- Visit the configuration page under Administration > Configuration > Category >
-  Foo (admin/config/category/foo) and enter the required information.
+- Visit the configuration page under Administration > Store > Configuration >
+  Payment methods > GoCardless (/admin/store/settings/payment/method/gc_client)
+  and enter the required information.
 
-- Any additional steps.
+- You are required to "Connect" your site with GoCardless before you can use
+  the module. Please read the project's Wiki for detailed setup instructions.
 
 
-Differences from Drupal 7 <!-- Do not include if there are no differences. -->
+Differences from Drupal 7
 -------------------------
 
-- Administrative interface has been improved.
+- The module is basically the same as the Drupal 7.x.2.x version except for
+  some minor code improvements.
 
-Documentation <!-- Do not include if you have not created a wiki page. -->
+
+Documentation
 -------------
 
-Additional documentation is located in [the Wiki](https://github.com/backdrop-contrib/foo-project/wiki/Documentation).
+Additional documentation is located in the project's Wiki: 
+(https://github.com/backdrop-contrib/uc_gc_client/wiki/Documentation).
 
-Issues <!-- This section is required. -->
+
+Issues
 ------
 
-Bugs and feature requests should be reported in [the Issue Queue](https://github.com/backdrop-contrib/foo-project/issues).
+Bugs and feature requests should be reported in the project's Issue Queue (https://github.com/backdrop-contrib/uc_gc_client/issues).
 
-Current Maintainers <!-- This section is required. -->
+
+Current Maintainers
 -------------------
 
-- [John Smith](https://github.com/username).
-- [Jane Lee](https://github.com/username).
-<!-- You may also wish to add: -->
-- Seeking additional maintainers.
+- Rob Squires (https://github.com/roblog).
 
-Credits <!-- This section is required. -->
+
+Credits
 -------
 
-- Ported to Backdrop CMS by [Betty Boop](https://github.com/username).
-- Originally written for Drupal by [Bob Brown](https://github.com/username).
-- Based on [The MagicalCode project](https://github.com/example).
-- Inital development sponsored by [MiniCorp](https://minicorp.example.com)
+- Ported to Backdrop CMS by Rob Squires (https://github.com/roblog).
+- Originally written for Drupal by Rob Squires (https://github.com/roblog).
+
 
 License
 -------
