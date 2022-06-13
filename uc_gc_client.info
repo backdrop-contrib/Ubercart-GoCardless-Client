@@ -1,7 +1,8 @@
 name = Ubercart GoCardless Client 
 description = Ubercart GoCardless Client integration 
-core = 7.x
+dependencies[] = ubercart
+dependencies[] = uc_attribute
+dependencies[] = uc_payment
 package = Ubercart - payment 
-dependencies[] = ubercart:uc_payment
-dependencies[] = ubercart:uc_attribute
-dependencies[] = date:date
+backdrop = 1.x
+type = module

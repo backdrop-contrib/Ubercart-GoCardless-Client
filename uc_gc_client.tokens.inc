@@ -35,7 +35,7 @@ function uc_gc_client_tokens($type, $tokens, $data = array(), $options = array()
             $replacements[$original] = $order->data['initial_payment'];
           }
           else {
-            $replacements[$original] = uc_currency_format($order->order_total, variable_get('uc_currency_sign'));
+            $replacements[$original] = uc_currency_format($order->order_total, config_get('uc_store.settings', 'uc_currency_sign'));
           }
           break;
       }

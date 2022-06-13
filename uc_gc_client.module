@@ -14,6 +14,17 @@ if (module_exists('rules')) {
 }
 
 /**
+ * Implements hook_config_info().
+ */
+function uc_gc_client_config_info() {
+  $prefixes['uc_gc_client.settings'] = array(
+    'label' => t('Ubercart GoCardless Client settings'),
+    'group' => t('Configuration'),
+  );
+  return $prefixes;
+}
+
+/**
  * Implements hook_help().
  */
 function uc_gc_client_help($path, $arg) {
@@ -79,7 +90,7 @@ function uc_gc_client_menu() {
   );
   $items['admin/store/orders/%uc_order/gocardless'] = array(
     'title' => 'GoCardless',
-    'page callback' => 'drupal_get_form',
+    'page callback' => 'backdrop_get_form',
     'page arguments' => array('uc_gc_client_payments_form', 3),
     'access arguments' => array('edit orders'),
     'type' => MENU_LOCAL_TASK,
@@ -87,14 +98,14 @@ function uc_gc_client_menu() {
     'file' => 'uc_gc_client.mandates.inc',
   );
   $items['admin/store/orders/%uc_order/gocardless/cancel_payment/%'] = array(
-    'page callback' => 'drupal_get_form',
+    'page callback' => 'backdrop_get_form',
     'page arguments' => array('uc_gc_client_cancel_payment', 3, 6),
     'access arguments' => array('edit orders'),
     'type' => MENU_CALLBACK,
     'file' => 'uc_gc_client.mandates.inc',
   );
   $items['admin/store/orders/%uc_order/gocardless/scheduled_action/%/%/%'] = array(
-    'page callback' => 'drupal_get_form',
+    'page callback' => 'backdrop_get_form',
     'page arguments' => array('uc_gc_client_scheduled_action', 3, 6, 7, 8),
     'access arguments' => array('edit orders'),
     'type' => MENU_CALLBACK,
@@ -109,7 +120,7 @@ function uc_gc_client_menu() {
   $items['admin/store/products/price_shift_tool'] = array(
     'title' => 'Price shift tool for GoCardless',
     'description' => 'Bulk price changing tool for existing GoCardless',
-    'page callback' => 'drupal_get_form',
+    'page callback' => 'backdrop_get_form',
     'page arguments' => array('uc_gc_client_priceshift_form'),
     'access arguments' => array('edit orders'),
     'type' => MENU_NORMAL_ITEM,
@@ -117,7 +128,7 @@ function uc_gc_client_menu() {
   );
   $items['admin/store/settings/countries/gocardless'] = array(
     'title' => 'GoCardless',
-    'page callback' => 'drupal_get_form',
+    'page callback' => 'backdrop_get_form',
     'page arguments' => array('uc_gc_client_countries_form'),
     'access arguments' => array('edit orders'),
     'type' => MENU_LOCAL_TASK,
@@ -136,7 +147,8 @@ function uc_gc_client_menu() {
  */
 function uc_gc_client_menu_local_tasks_alter(&$data, $router_item, $root_path) {
   if (strpos($root_path, 'admin/store/orders/%') !== FALSE) {
-    if (variable_get('uc_gc_client_payments_tab', 0)) {
+    $config = config('uc_gc_client.settings');
+    if ($config->get('payments_tab')) {
       $payment_method = db_select('uc_orders', 'o')
         ->fields('o', array('payment_method'))
         ->condition('order_id', arg(3))
@@ -220,7 +232,8 @@ function uc_gc_client_process_address_field($element, $form_state) {
     ->condition('version', 0, '>')
     ->execute()->fetchAllAssoc('country_iso_code_2');
 
-  $gc_countries = variable_get('uc_gc_client_countries');
+  $config = config('uc_gc_client.settings');
+  $gc_countries = $config->get('countries');
   $enabled_countries = array();
   foreach ($gc_countries as $gc_code => $gc_country) {
     if ($gc_country['enabled'] && isset($uc_countries[$gc_code])) {
@@ -255,8 +268,9 @@ function uc_gc_client_form_uc_cart_checkout_form_alter(&$form, &$form_state, $fo
       }
       // Optional checkout review selected. (This should only be selected
       // if GC is the only enabled payment method.)
-      if (variable_get('uc_gc_client_optional_checkout_review', FALSE)) {
-        $form['actions']['continue']['#value'] = variable_get('uc_gc_client_checkout_label');
+      $config = config('uc_gc_client.settings');
+      if ($config->get('optional_checkout_review')) {
+        $form['actions']['continue']['#value'] = $config->get('checkout_label');
         $form['#submit'][] = 'uc_gc_client_checkout_form_submit';
       }
     }
@@ -279,8 +293,8 @@ function uc_gc_client_form_uc_cart_checkout_review_form_alter(&$form, &$form_sta
     if ($order->payment_method == 'gc_client') {
       $form['actions']['submit']['#access'] = FALSE;
       $form['#prefix'] = '<table style="display:inline;padding-top:1em;"><tr><td>';
-      $checkout_review_form = drupal_get_form('uc_gc_client_checkout_review_form', $order);
-      $suffix = '</td><td style="width:100%;text-align:center;">' . drupal_render($checkout_review_form) . '</td></tr></table>';
+      $checkout_review_form = backdrop_get_form('uc_gc_client_checkout_review_form', $order);
+      $suffix = '</td><td style="width:100%;text-align:center;">' . backdrop_render($checkout_review_form) . '</td></tr></table>';
       $form['#suffix'] = $suffix;
     }
   }
@@ -290,6 +304,7 @@ function uc_gc_client_form_uc_cart_checkout_review_form_alter(&$form, &$form_sta
  * Form constructor: returns elements for the checkout review form.
  */
 function uc_gc_client_checkout_review_form($form_state, $order) {
+  $config = config('uc_gc_client.settings');
   $form['order'] = array(
     '#type' => 'value',
     '#value' => $order['build_info']['args'][0],
@@ -297,7 +312,7 @@ function uc_gc_client_checkout_review_form($form_state, $order) {
   // Provide a submit button for the Checkout review form.
   $form['gocardless_link'] = array(
     '#type' => 'submit',
-    '#value' => variable_get('uc_gc_client_checkout_label', t('Order')),
+    '#value' => $config->get('checkout_label'),
   );
   $form['#submit'][] = 'uc_gc_client_checkout_form_submit';
   return $form;
@@ -386,7 +401,7 @@ function uc_gc_client_checkout_form_submit($form, $form_state) {
     if ($billing_request) {
       global $base_url;
       // Adds a hook so that the details can be altered by other modules.
-      drupal_alter('billing_request_details', $details, $order->order_id);
+      backdrop_alter('billing_request_details', $details, $order->order_id);
       $data = array(
         'endpoint' => 'billing_request_flows',
         'action' => 'create',
@@ -411,9 +426,10 @@ function uc_gc_client_checkout_form_submit($form, $form_state) {
     // Redirect Flow
     else {
       $details['scheme'] = $scheme;
-      drupal_alter('mandate_details', $details, $order->order_id);
-      $ext = variable_get('uc_gc_client_sandbox') ? '_sandbox' : '_live';
-      $details['redirect_uri'] = variable_get('uc_gc_client_partner_url') . '/gc_partner/mandate?org_id=' . variable_get('uc_gc_client_org_id' . $ext) . '&order_id=' . $order->order_id . '&payment_method=' . $order->payment_method;
+      backdrop_alter('mandate_details', $details, $order->order_id);
+      $config = config('uc_gc_client.settings');
+      $ext = $config->get('sandbox') ? '_sandbox' : '_live';
+      $details['redirect_uri'] = $config->get('partner_url') . '/gc_partner/mandate?org_id=' . $config->get('org_id' . $ext) . '&order_id=' . $order->order_id . '&payment_method=' . $order->payment_method;
       $data = array(
         'endpoint' => 'redirect_flows',
         'action' => 'create',
@@ -423,15 +439,15 @@ function uc_gc_client_checkout_form_submit($form, $form_state) {
     }
     $result = uc_gc_client_post($data);
     if (isset($result->response->api_error)) {
-      drupal_set_message(t('There was an error checking out with GoCardless. Please contact the site administrator for assistance.'), 'error');
+      backdrop_set_message(t('There was an error checking out with GoCardless. Please contact the site administrator for assistance.'), 'error');
       watchdog('uc_gc_client', print_r($result, TRUE), NULL, WATCHDOG_ERROR);
     }
     else {
-      drupal_goto($result->response);
+      backdrop_goto($result->response);
     }
   }
   else {
-    drupal_set_message(t('Something went wrong with authentication'), 'error');
+    backdrop_set_message(t('Something went wrong with authentication'), 'error');
   }
 }
 
@@ -472,10 +488,11 @@ function uc_gc_client_redirect_details($order) {
     ->condition('country_id', $country)
     ->execute()->fetchField();
 
-  $valid_countries = variable_get('uc_gc_client_countries');
+  $config = config('uc_gc_client.settings');
+  $valid_countries = $config->get('countries');
   if (!isset($valid_countries[$country_code])) {
-    drupal_set_message(t('Sorry, this country is not avaialable to GoCardless right now.'), 'warning');
-    drupal_goto($_SERVER['HTTP_REFERER']);
+    backdrop_set_message(t('Sorry, this country is not avaialable to GoCardless right now.'), 'warning');
+    backdrop_goto($_SERVER['HTTP_REFERER']);
   }
 
   $details = array(
@@ -620,9 +637,10 @@ function uc_gc_client_interval_params($option) {
       break;
 
     default:
+      $config = config('uc_gc_client.settings');
       $interval_params = array(
-        'length' => variable_get('uc_gc_client_interval_length'),
-        'unit' => variable_get('uc_gc_client_interval_unit'),
+        'length' => $config->get('interval_length'),
+        'unit' => $config->get('interval_unit'),
       );
       break;
   }
@@ -719,7 +737,7 @@ function uc_gc_client_pane_cancel_button($op, $order) {
   switch ($op) {
     case 'customer':
       if (user_access('view own invoices')) {
-        return drupal_get_form('uc_gc_client_pane_cancel_form', $order);
+        return backdrop_get_form('uc_gc_client_pane_cancel_form', $order);
       }
   }
 }
@@ -734,17 +752,25 @@ function uc_gc_client_pane_cancel_button($op, $order) {
  *   The Ubercart order for which the mandate is being cancelled.
  */
 function uc_gc_client_pane_cancel_form($form, &$form_state, $order) {
-  if ($order->order_status <> 'canceled') {
-    $form['order'] = array(
-      '#value' => $order,
-    );
-    $confirm = t('Are you sure you want to cancel the debit mandate? This action cannot be undone.');
-    $form['submit'] = array(
-      '#type' => 'submit',
-      '#value' => t('Cancel GoCardless mandate'),
-      '#attributes' => array('onclick' => 'if (!confirm("' . $confirm . '")) {return false;}'),
-    );
-    return $form;
+  if ($order->payment_method == 'gc_client' && $order->order_status <> 'canceled') {
+    if (db_select('uc_gc_client', 'g')
+        ->fields('g')
+        ->condition('ucid', $order->order_id)
+        ->execute()->fetch()) {
+
+      $form['order'] = array(
+        '#value' => $order,
+      );
+      $confirm = t('Are you sure you want to cancel the debit mandate? This action cannot be undone.');
+      $form['submit'] = array(
+        '#type' => 'submit',
+        '#value' => t('Cancel GoCardless mandate'),
+        '#attributes' => array(
+          'onclick' => 'if (!confirm("'.$confirm.'")) {return false;}',
+        ),
+      );
+      return $form;
+    }
   }
 }
 
@@ -782,7 +808,8 @@ function uc_gc_client_cron() {
     ->execute()
     ->fetchAll();
 
-  $payment_limit = variable_get('uc_gc_client_payment_limit', 0);
+  $config = config('uc_gc_client.settings');
+  $payment_limit = $config->get('payment_limit');
 
   foreach ($payments as $payment) {
     // Check status of the mandate, do not create payment if it is cancelled.
@@ -846,8 +873,8 @@ function uc_gc_client_cron() {
     $next_paymentdate = date('D d M Y', $payment->next_payment);
     $calculate = uc_gc_client_price_calculate($order, $payment->ucpid, $next_paymentdate, 1);
     $amount = $calculate['amount'];
-    $currency_code = isset($calculate['currency']) ? $calculate['currency'] : variable_get('uc_currency_code');
-    $currency_sign = isset($calculate['sign']) ? $calculate['sign'] : variable_get('uc_currency_sign');
+    $currency_code = isset($calculate['currency']) ? $calculate['currency'] : config_get('uc_store.settings', 'uc_currency_code');
+    $currency_sign = isset($calculate['sign']) ? $calculate['sign'] : config_get('uc_store.settings', 'uc_currency_sign');
 
     // Make sure daily payment limit hasn't been exceeded.
     if (!empty($payment_limit) && $payment_limit != 0) {
@@ -882,13 +909,13 @@ function uc_gc_client_cron() {
         watchdog('uc_gc_client', $watchdog, array(), WATCHDOG_WARNING);
 
         // Send a warning email to admin.
-        $to_customer = variable_get('uc_gc_client_warnings_email');
+        $to_customer = $config->get('warnings_email');
         $params = array(
           'order_id' => $order->order_id,
           'payment_limit' => $payment_limit,
           'amount' => uc_currency_format($amount, $currency_sign),
         );
-        drupal_mail('uc_gc_client', 'payment-limit-reached', $to_customer, language_default(), $params);
+        backdrop_mail('uc_gc_client', 'payment-limit-reached', $to_customer, language_default(), $params);
         continue;
       }
     }
@@ -901,7 +928,7 @@ function uc_gc_client_cron() {
     // Invoke hook_payment_details_alter so that payment details can be
     // altered by another module.
     $type = 'scheduled';
-    drupal_alter('payment_details', $payment_details, $order, $type);
+    backdrop_alter('payment_details', $payment_details, $order, $type);
     $amount = $payment_details['amount'];
     $name = $payment_details['name'];
     $metadata = $payment_details['metadata'];
@@ -923,9 +950,9 @@ function uc_gc_client_cron() {
       watchdog('uc_gc_client', $watchdog, array(), WATCHDOG_WARNING);
 
       // Send a warning email to admin.
-      $to_customer = variable_get('uc_gc_client_warnings_email');
+      $to_customer = $config->get('warnings_email');
       $params = array('order_id' => $order->order_id);
-      drupal_mail('uc_gc_client', 'payment-less-than-one', $to_customer, language_default(), $params);
+      backdrop_mail('uc_gc_client', 'payment-less-than-one', $to_customer, language_default(), $params);
     }
 
     elseif ($amount == 0) {
@@ -1001,7 +1028,7 @@ function uc_gc_client_cron() {
       $next_payment = strtotime($string, $payment->next_payment);
 
       // Provide a hook so that next_payment can be altered by another module.
-      drupal_alter('next_payment', $next_payment, $order);
+      backdrop_alter('next_payment', $next_payment, $order);
 
       db_update('uc_gc_client')
         ->fields(array(
@@ -1106,8 +1133,9 @@ function uc_gc_client_price_calculate($order, $ucpid, $next_paymentdate = FALSE,
   $amount = ($amount + $adjs_total + $line_items) * $price_x;
 
   // Modify payment amount and currency if international customer.
-  if (variable_get('uc_gc_client_currencies')) {
-    $default_currency = variable_get('uc_currency_code');
+  $config = config('uc_gc_client.settings');
+  if ($config->get('currencies')) {
+    $default_currency = config_get('uc_store.settings', 'uc_currency_code');
     $country_code = !empty($order->billing_country) ? $order->billing_country : $order->delivery_country;
     $currency_arr = uc_gc_client_currency($country_code);
     // Get latest exchange rate from GoCardless and alter the product price.
@@ -1120,7 +1148,7 @@ function uc_gc_client_price_calculate($order, $ucpid, $next_paymentdate = FALSE,
       );
       $result = uc_gc_client_api($params);
       if (!isset($result->response)) {
-        drupal_set_message(t("We were unable to obtain a currency exchange rate for '@title' at this time", array(
+        backdrop_set_message(t("We were unable to obtain a currency exchange rate for '@title' at this time", array(
           '@title' => $product->title,
         )), 'warning');
       }
@@ -1128,7 +1156,7 @@ function uc_gc_client_price_calculate($order, $ucpid, $next_paymentdate = FALSE,
         $exchange_rates = $result->response->body->currency_exchange_rates;
         $amount *= $exchange_rates[0]->rate;
         if ($next_paymentdate && $status) {
-          drupal_set_message(t("The amount for '@title' has been converted to @amount using the real currency exchange rates provided by GoCardless.", array(
+          backdrop_set_message(t("The amount for '@title' has been converted to @amount using the real currency exchange rates provided by GoCardless.", array(
             '@amount' => uc_currency_format($amount, $currency_arr['sign']),
             '@title' => $product->title,
           )));
@@ -1160,7 +1188,7 @@ function uc_gc_client_mail($key, &$message, $params) {
     '@order_id' => $params['order_id'],
     '@payment_limit' => isset($params['payment_limit']) ? $params['payment_limit'] : NULL,
     '@amount' => isset($params['amount']) ? $params['amount'] : NULL,
-    '@sign' => variable_get('uc_currency_sign'),
+    '@sign' => config_get('uc_store.settings', 'uc_currency_sign'),
   );
 
   switch ($key) {
@@ -1258,7 +1286,7 @@ function uc_gc_client_uc_order_cancel($order) {
   $result = uc_gc_client_api($params);
 
   if (!isset($result->response)) {
-    drupal_set_message(t('Something went wrong cancelling GoCardless debit mandate @ucid. Please try again or contact the site administrator for assistance.', array('@ucid' => $gc_client->gcid)), 'error');
+    backdrop_set_message(t('Something went wrong cancelling GoCardless debit mandate @ucid. Please try again or contact the site administrator for assistance.', array('@ucid' => $gc_client->gcid)), 'error');
   }
   elseif ($result->response->status_code == 200) {
     // Update status on database for all products in order.
@@ -1272,7 +1300,7 @@ function uc_gc_client_uc_order_cancel($order) {
 
     $comment = t('Order @order_id cancelled by customer.', array('@order_id' => $order->order_id));
     uc_order_comment_save($order->order_id, $order->uid, $comment, 'order', 'Canceled', TRUE);
-    drupal_set_message(t('Your GoCardless debit mandate @ucid has been cancelled, and you will receive an email confirmation.', array('@ucid' => $gc_client->gcid)));
+    backdrop_set_message(t('Your GoCardless debit mandate @ucid has been cancelled, and you will receive an email confirmation.', array('@ucid' => $gc_client->gcid)));
   }
 }
 
@@ -1342,7 +1370,8 @@ function uc_gc_client_element_validate_positive_number($element, &$form_state) {
  *   found.
  */
 function uc_gc_client_currency($country_code) {
-  $countries = variable_get('uc_gc_client_countries');
+  $config = config('uc_gc_client.settings');
+  $countries = $config->get('countries');
   if (is_numeric($country_code)) {
     $country_code = db_select('uc_countries', 'c')
       ->fields('c', array('country_iso_code_2'))

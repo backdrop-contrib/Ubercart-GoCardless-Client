@@ -15,16 +15,15 @@ CONTENTS OF THIS FILE
 
 INTRODUCTION
 ------------
+This module is provided by Seamless-CMS which is a partner of GoCardless.
 
-The Ubercart GoCardless Client module provides an integration with the
-Ubercart e-commerce suite, and GoCardless.com. Sites that implement the 
-module are 'clients' of https://seamless-cms.co.uk, which handles the 
-management of debit mandates with GoCardless on behalf of the client
-site.
+It integrates the Ubercart e-commerce suite with the GoCardless online payment
+service. Sites that implement the module are 'clients' of 
+https://seamless-cms.co.uk, which generates GoCardless payments and debit
+mandates on behalf of the client site.
 
-The module integrates into Ubercart like any other payment service module,
-and allows customers to make instant payments and/or create debit mandates
-upon checkout for generating recurring payments.
+Ubercart GoCardless Client enables customers to checkout and make Instant 
+payments using open banking protocol, and/or create debit mandates for generating recurring payments.
 
 The big advantage with GoCardless is that it is generally cheaper than
 credit/debit card payment services. Fees in the UK are 1% + 20p, compared
@@ -62,7 +61,7 @@ REQUIREMENTS
 
 PRODUCT PAYMENT TYPES
 ---------------------
-Each product in your store is individually configurred to use either Instant
+Each product in your store is individually configured to use either Instant
 payments, or one of the two recurring payment types: One-off payments, or 
 Subscription payments.
 

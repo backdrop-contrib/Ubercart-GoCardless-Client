@@ -11,7 +11,7 @@
  * Provides a tool for bulk changing the price of purchased products.
  */
 function uc_gc_client_priceshift_form($form, $form_state) {
-  $sandbox = variable_get('uc_gc_client_sandbox');
+  $sandbox = config_get('uc_gc_client.settings', 'sandbox');
   $subs = db_select('uc_gc_client', 'g')
     ->fields('g')
     ->condition('sandbox', $sandbox)
@@ -208,7 +208,7 @@ function uc_gc_client_priceshift_execute($order, $ucpid, $cost_adj, $price_adj, 
       '@price' => uc_currency_format($product->price),
     );
     $message = t("Order #@order_id with product: '@product', has had its cost changed from @cost_old to @cost, and its price changed from @price_old to @price.", $message_array);
-    drupal_set_message($message);
+    backdrop_set_message($message);
 
     $comment = t("Product '@product' has had its price changed from @price_old to @price.", $message_array);
     uc_order_comment_save($order->order_id, $order->uid, $comment, 'order');

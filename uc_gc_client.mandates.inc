@@ -97,7 +97,7 @@ function uc_gc_client_payments_form($form, &$form_state, $order) {
   );
   $result = uc_gc_client_api($params);
   if (!isset($result->response)) {
-    drupal_set_message(t('No GoCardless mandate found for this order'));
+    backdrop_set_message(t('No GoCardless mandate found for this order'));
     return $form;
   }
 
@@ -116,16 +116,16 @@ function uc_gc_client_payments_form($form, &$form_state, $order) {
     // Payments.
     $type = 'One-off payments';
     $header = array(
-      t('product'),
-      t('payment type'),
-      t('cost'),
-      t('price'),
-      t('payment interval'),
-      t('next scheduled payment creation'),
-      t('next possible charge date'),
-      t('gocardless id'),
-      t('created'),
-      t('status'),
+      t('Product'),
+      t('Payment type'),
+      t('Cost'),
+      t('Price'),
+      t('Payment interval'),
+      t('Next scheduled payment creation'),
+      t('Next possible charge date'),
+      t('Gocardless Id'),
+      t('Created'),
+      t('Status'),
     );
 
     $payment_header = array(
@@ -324,7 +324,7 @@ function uc_gc_client_payments_form($form, &$form_state, $order) {
   $form['create_payment']['charge_date'] = array(
     '#title' => t('Charge customer at'),
     '#type' => module_exists('date_popup') ? 'date_popup' : 'date_select',
-    '#date_format' => module_exists('date_popup') ? variable_get('date_format_uc_store') : 'd M Y',
+    '#date_format' => module_exists('date_popup') ? config_get('system.date', 'format.uc_store') : 'd M Y',
     '#default_value' => date('Y-m-d', strtotime($mandate->next_possible_charge_date)),
     '#date_year_range' => '0:+1',
     '#datepicker_options' => array('minDate' => 0),
@@ -500,11 +500,14 @@ function uc_gc_client_payments_form($form, &$form_state, $order) {
     '#access' => $gc->type == 'P' ? TRUE : FALSE,
   );
   $form['next_payment']['next_payment'] = array(
-    '#type' => module_exists('date_popup') ? 'date_popup' : 'date_select',
-    '#date_format' => module_exists('date_popup') ? variable_get('date_format_medium') : 'd M Y H:i',
-    '#default_value' => date('Y-m-d H:i', $gc->next_payment),
-    '#date_year_range' => '0:+1',
-    '#datepicker_options' => array('minDate' => 0),
+    '#title' => '',
+    '#type' => 'date_popup',
+    '#date_format' => 'd M Y H:i',
+    '#default_value' => $gc->next_payment ? date('Y-m-d H:i', $gc->next_payment): NULL,
+    '#date_year_range' => '0:+2',
+    '#datepicker_options' => array(
+      'minDate' => 0,
+    ),
   );
   $form['next_payment']['next_payment_button'] = array(
     '#type' => 'submit',
@@ -640,7 +643,7 @@ function uc_gc_client_adjust_submit($form, &$form_state) {
         ->execute();
     }
   }
-  drupal_set_message(t('New Scheduled Adjustment successfully added'));
+  backdrop_set_message(t('New Scheduled Adjustment successfully added'));
 }
 
 /**
@@ -675,11 +678,11 @@ function uc_gc_client_validate_adjs($order, $ucpid, array $dates, $amount) {
     // Provide a hook so that $amount and/or $price can be altered by another
     // module.
     $price = $order->order_total;
-    drupal_alter('adjs_validate', $amount, $price, $date, $order->order_id);
+    backdrop_alter('adjs_validate', $amount, $price, $date, $order->order_id);
     $sum = $sum + $amount + $price;
 
     if ($sum < 1 && $sum != 0) {
-      drupal_set_message(t('The schedule cannot be placed because the sum of scheduled adjustments, plus the price of the product, for @date is less than @amount, which is not allowed by GoCardless', array(
+      backdrop_set_message(t('The schedule cannot be placed because the sum of scheduled adjustments, plus the price of the product, for @date is less than @amount, which is not allowed by GoCardless', array(
         '@date' => $date,
         '@amount' => uc_currency_format(1),
       )), 'warning');
@@ -758,11 +761,11 @@ function uc_gc_client_scheduled_action_submit($form, &$form_state) {
       ->execute();
   }
   $action == 'cancel' ? $action = 'cancelled' : $action = 'deleted';
-  drupal_set_message(t('Scheduled adjustment @action.', array(
+  backdrop_set_message(t('Scheduled adjustment @action.', array(
     '@action' => $action,
   )));
   $path = 'admin/store/orders/' . $form_state['values']['ucid'] . '/gocardless';
-  drupal_goto($path, array('fragment' => 'adjustments'));
+  backdrop_goto($path, array('fragment' => 'adjustments'));
 }
 
 /**
@@ -804,7 +807,7 @@ function uc_gc_client_create_payment_submit($form, &$form_state) {
     'action' => 'create',
     'mandate' => $mandate->id,
     'amount' => $amount,
-    'currency' => variable_get('uc_currency_code'),
+    'currency' => config_get('uc_store.settings', 'uc_currency_code'),
     'description' => !empty($form_state['values']['payment_title']) ? $form_state['values']['payment_title'] : $order->products[$ucpid]->title,
     'charge_date' => $form_state['values']['charge_date'],
     'metadata' => array(
@@ -818,7 +821,7 @@ function uc_gc_client_create_payment_submit($form, &$form_state) {
     '@amount' => uc_currency_format($amount),
     '@mandate' => $mandate->id,
   ));
-  drupal_set_message(t('@text', array('@text' => $text)));
+  backdrop_set_message(t('@text', array('@text' => $text)));
   uc_order_comment_save($order->order_id, $order->uid, $text, 'order');
   $watchdog = t('Order #@order_id:', array(
     '@order_id' => $order->order_id,
@@ -871,24 +874,27 @@ function uc_gc_client_cancel_payment_submit($form, &$form_state) {
   );
   $result = uc_gc_client_api($params);
   if ($result->response->status_code == 200) {
-    drupal_set_message(t('Payment @payment_id has been cancelled.', array(
+    backdrop_set_message(t('Payment @payment_id has been cancelled.', array(
       '@payment_id' => $payment_id,
     )));
   }
   else {
-    drupal_set_message(t('There was a problem cancelling payment @payment_id', array(
+    backdrop_set_message(t('There was a problem cancelling payment @payment_id', array(
       '@payment_id' => $payment_id,
     )), 'warning');
   }
   $link = 'admin/store/orders/' . $form_state['values']['ucid'] . '/gocardless';
-  drupal_goto($link);
+  backdrop_goto($link);
 }
 
 /**
  * Form submission handler for Next Payment.
  */
 function uc_gc_client_next_payment_submit($form, &$form_state) {
-  $next_payment = strtotime($form_state['values']['next_payment']);
+  $next_payment = NULL;
+  if ($form_state['values']['next_payment']) {
+    $next_payment = strtotime($form_state['values']['next_payment']);
+  }
   $ucpid = $form_state['values']['ucpid'];
   $title = $form_state['values']['product_select'][$ucpid];
 
@@ -896,12 +902,12 @@ function uc_gc_client_next_payment_submit($form, &$form_state) {
     ->fields(array(
       'next_payment' => $next_payment,
     ))
-    ->condition('ucpid', $ucpid, '=')
+    ->condition('ucpid', $ucpid)
     ->execute();
 
-  drupal_set_message(t('The next payment creation date for @title has been updated to @next_payment', array(
+  backdrop_set_message(t('The next payment creation date for @title has been @next_payment.', array(
     '@title' => $title,
-    '@next_payment' => format_date($next_payment, 'medium'),
+    '@next_payment' => $next_payment ? 'updated to ' . format_date($next_payment, 'medium') : 'unset',
   )));
 }
 
@@ -932,7 +938,7 @@ function uc_gc_client_change_price_submit($form, &$form_state) {
     '@price_new' => $price_new,
     '@next' => $next,
   ));
-  drupal_set_message(t('@text', array('@text' => $text)));
+  backdrop_set_message(t('@text', array('@text' => $text)));
   uc_order_comment_save($order->order_id, $order->uid, $text, 'order');
   $watchdog = t('Order #@order_id:', array(
     '@order_id' => $order->order_id,
@@ -945,13 +951,13 @@ function uc_gc_client_change_price_submit($form, &$form_state) {
  */
 function uc_gc_client_schedules_autocomplete($string) {
   $matches = array();
-  $titles = explode("\n", variable_get('uc_gc_client_preauth_adjs'));
+  $titles = explode("\n", config_get('uc_gc_client.settings', 'preauth_adjs'));
   foreach ($titles as $title) {
     if (strpos(strtolower($title), strtolower($string)) !== FALSE) {
       $matches[$title] = check_plain($title);
     }
   }
-  drupal_json_output($matches);
+  backdrop_json_output($matches);
 }
 
 /**

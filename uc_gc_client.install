@@ -9,26 +9,25 @@
  * Implements hook_install().
  */
 function uc_gc_client_install() {
-  variable_set('uc_gc_client_partner_url', 'https://seamless-cms.co.uk');
-  variable_set('uc_gc_client_checkout_label', 'Pay with GoCardless');
-  variable_set('uc_gc_client_default_type', 'P');
-  variable_set('uc_gc_client_sandbox', 1);
-  variable_set('uc_gc_client_create_payment', 0);
-  variable_set('uc_gc_client_preauth_email', variable_get('site_mail', ''));
-  variable_set('uc_gc_client_payment_limit', 3);
-  variable_set('date_format_uc_store', 'D d M Y');
-  variable_set('date_format_medium', 'D, d/m/Y - H:i');
-  variable_set('date_format_gocardless', 'Y-m-d');
+  config_set('uc_gc_client.settings', 'warnings_email', config_get('system.core', 'site_mail'));
   $countries = uc_gc_client_countries_define();
-  variable_set('uc_gc_client_countries', $countries);
+  config_set('uc_gc_client.settings', 'countries', $countries);
+  $format = array(
+    'label' => 'GoCardless',
+    'pattern' => 'Y-m-d',
+    'module' => 'uc_gc_client',
+    'hidden' => 0,
+  );
+  config_set('system.date', 'formats.gocardless', $format);
+  //backdrop_static_reset('system_get_date_formats');
 
   // Provide 'Interval' attribute and set of options.
-  $count = db_select('uc_attributes', 'a')
+  $attributes = db_select('uc_attributes', 'a')
     ->fields('a')
-    ->condition('name', 'Interval', '=')
-    ->execute()->rowCount();
+    ->condition('name', 'Interval')
+    ->execute()->fetch();
 
-  if ($count == 0) {
+  if (!$attributes) {
     $insert_att = db_insert('uc_attributes')
       ->fields(array(
         'name' => 'Interval',
@@ -85,19 +84,26 @@ function uc_gc_client_install() {
       'locked' => 1,
     ))
     ->execute();
+  db_merge('uc_order_statuses')
+    ->key(array('order_status_id' => 'gocardless_payment_failed'))
+    ->insertFields(array(
+      'order_status_id' => 'gocardless_payment_failed',
+      'title' => $t('GoCardless payment failed'),
+      'state' => 'post_checkout',
+      'weight' => 9,
+      'locked' => 1,
+    ))
+    ->updateFields(array(
+      'state' => 'post_checkout',
+      'locked' => 1,
+    ))
+    ->execute();
 }
 
 /**
  * Implements hook_uninstall().
  */
 function uc_gc_client_uninstall() {
-  // Remove variables.
-  global $conf;
-  foreach (array_keys($conf) as $key) {
-    if (strpos($key, 'uc_gc_client_') === 0) {
-      variable_del($key);
-    }
-  }
 }
 
 /**
@@ -338,175 +344,4 @@ function uc_gc_client_schema() {
     ),
   );
   return $schema;
-}
-
-/**
- * Add a mandate_active order status.
- */
-function uc_gc_client_update_7001() {
-  db_insert('uc_order_statuses')
-    ->fields(array(
-      'order_status_id' => 'mandate_active',
-      'title' => t('GoCardless mandate active'),
-      'state' => 'post_checkout',
-      'weight' => 7,
-      'locked' => 1,
-    ))
-    ->execute();
-}
-
-/**
- * Add a mandate_failed order status.
- */
-function uc_gc_client_update_7002() {
-  db_insert('uc_order_statuses')
-    ->fields(array(
-      'order_status_id' => 'mandate_failed',
-      'title' => t('GoCardless mandate failed'),
-      'state' => 'post_checkout',
-      'weight' => 8,
-      'locked' => 1,
-    ))
-    ->execute();
-}
-
-/**
- * Create GC country definitions as a variable.
- */
-function uc_gc_client_update_7003() {
-  $countries = uc_gc_client_countries_define();
-  variable_set('uc_gc_client_countries', $countries);
-}
-
-/**
- * Add country definitions for Denmark, Australia and New Zealand.
- */
-function uc_gc_client_update_7004() {
-  $countries = variable_get('uc_gc_client_countries');
-  $countries_new = array(
-    'AU' => array(
-      'region' => 'becs',
-      'currency' => 'AUD',
-      'sign' => '$',
-      'enabled' => '0',
-    ),
-    'DK' => array(
-      'region' => 'betalingsservice',
-      'currency' => 'DKK',
-      'sign' => 'kr',
-      'enabled' => '0',
-    ),
-    'NZ' => array(
-      'region' => 'becs_nz',
-      'currency' => 'NZD',
-      'sign' => '$',
-      'enabled' => '0',
-    ),
-  );
-  variable_set('uc_gc_client_countries', array_merge($countries, $countries_new));
-}
-
-/**
- * Add country definition for United States.
- */
-function uc_gc_client_update_7005() {
-  $countries = variable_get('uc_gc_client_countries');
-  $countries_new = array(
-    'US' => array(
-      'region' => 'ach',
-      'currency' => 'USD',
-      'sign' => '$',
-      'enabled' => '0',
-    ),
-  );
-  variable_set('uc_gc_client_countries', array_merge($countries, $countries_new));
-}
-
-/**
- * Clear cache to register updated menu items.
- */
-function uc_gc_client_update_7006() {
-  cache_clear_all();
-}
-
-/**
- * Add the 'next_payment_uuid' field in the uc_gc_client table.
- */
-function uc_gc_client_update_7007() {
-  if (!db_field_exists('uc_gc_client', 'next_payment_uuid')) {
-    $field = [
-      'description' => 'Unique identifier for the next payment',
-      'type' => 'varchar',
-      'length' => '128',
-      'not null' => FALSE,
-    ];
-    db_add_field('uc_gc_client', 'next_payment_uuid', $field);
-  }
-}
-
-/**
- * Update the uc_gc_client_products table
- */
-function uc_gc_client_update_7008() {
-  db_drop_primary_key('uc_gc_client_products');
-  db_change_field('uc_gc_client_products','nid', 'nid',
-    array(
-      'description' => 'The node ID for the product',
-      'type' => 'int',
-      'not null' => TRUE,
-      'default' => 0,
-    ), array(
-      'primary key' => array(
-      'nid',
-    ),
-  ));
-}
-
-/**
- * Add new "GoCardless Payment failed" order status.
- */
-function uc_gc_client_update_7009() {
-  $t = get_t();
-  db_insert('uc_order_statuses')
-    ->fields(array(
-      'order_status_id' => 'gocardless_payment_failed',
-      'title' => $t('GoCardless payment failed'),
-      'state' => 'post_checkout',
-      'weight' => 9,
-      'locked' => 1,
-    ))
-    ->execute();
-}
-
-/**
- * Delete the uc_gc_client_fixer variable.
- */
-function uc_gc_client_update_7010() {
-  variable_del('uc_gc_client_fixer');
-  return t('The fixer.io variable has been deleted since the module now uses the GoCardless API to look up exchange rates.');
-}
-
-/**
- * Clear cache to register updated menu items.
- */
-function uc_gc_client_update_7011() {
-  cache_clear_all();
-  return t('Cache cleared');
-}
-
-/**
- * Provide essential updated site details to Seamless-CMS.
- */
-function uc_gc_client_update_7012() {
-  global $base_url;
-  $data = array(
-    'endpoint' => 'client',
-    'action' => 'update',
-    'client_domain' => parse_url($base_url, PHP_URL_HOST),
-    'client_domain_scheme' => parse_url($base_url, PHP_URL_SCHEME),
-    'module' => 'Ubercart 7.x-2.x',
-    'site_email' => variable_get('site_mail'),
-  );
-  $result = uc_gc_client_post($data);
-  return $result->response;
 }

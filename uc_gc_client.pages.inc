@@ -15,14 +15,14 @@
  */
 function uc_gc_client_billing_request($order_id, $request_id) {
   if (intval($_SESSION['cart_order']) != $order_id) {
-    drupal_set_message(t('Thank you for your order! GoCardless will notify us once your payment has been processed.'));
-    drupal_goto('cart');
+    backdrop_set_message(t('Thank you for your order! GoCardless will notify us once your payment has been processed.'));
+    backdrop_goto('cart');
   }
 
   // Ensure the payment method is GoCardless.
   $order = uc_order_load($order_id);
   if ($order->payment_method != 'gc_client') {
-    drupal_goto('cart');
+    backdrop_goto('cart');
   }
 
   // Call the GoC API to get customer ID and mandate ID if there is one.
@@ -42,7 +42,7 @@ function uc_gc_client_billing_request($order_id, $request_id) {
         '@mandate' => $mandate_id,
       ));
       uc_order_comment_save($order_id, $uid, $comment, 'order', 'Pending', TRUE);
-      drupal_set_message($comment);
+      backdrop_set_message($comment);
     }
     $customer_id = NULL;
     if (isset($billing_request->links->customer)) {
@@ -50,8 +50,8 @@ function uc_gc_client_billing_request($order_id, $request_id) {
     }
   }
   else {
-    drupal_set_message(t('Something went wrong with your order! Please contact the site administrator.'), 'error');
-    drupal_goto('cart');
+    backdrop_set_message(t('Something went wrong with your order! Please contact the site administrator.'), 'error');
+    backdrop_goto('cart');
   }
 
   // Process the Instant Payment that has been created.
@@ -97,7 +97,7 @@ function uc_gc_client_billing_request($order_id, $request_id) {
         ->execute();
     }
     uc_order_comment_save($order_id, $uid, $order_comment, 'order', 'Completed', TRUE);
-    drupal_set_message($order_comment);
+    backdrop_set_message($order_comment);
   }
 
   // Process any One-off payments if required.
@@ -117,7 +117,7 @@ function uc_gc_client_billing_request($order_id, $request_id) {
         'created' => $created,
         'start_date' => $created,
         'updated' => $created,
-        'sandbox' => variable_get('uc_gc_client_sandbox', TRUE),
+        'sandbox' => config_get('uc_gc_client.settings', 'sandbox'),
       );
       db_insert('uc_gc_client')
         ->fields($data)
@@ -129,7 +129,7 @@ function uc_gc_client_billing_request($order_id, $request_id) {
         $next_payment = strtotime($string, $created);
 
         // Provide a hook so that next_payment can be altered by another module.
-        drupal_alter('billing_request_next_payment', $next_payment, $order);
+        backdrop_alter('billing_request_next_payment', $next_payment, $order);
 
         db_update('uc_gc_client')
           ->fields(array(
@@ -146,7 +146,7 @@ function uc_gc_client_billing_request($order_id, $request_id) {
           '@product_title' => $product->title,
           '@next_payment_date' => format_date($next_payment, 'uc_store'),
         ));
-        drupal_set_message($message);
+        backdrop_set_message($message);
         uc_order_comment_save($order_id, $uid, $message, 'order', 'Completed', TRUE);
       }
     }
@@ -154,7 +154,7 @@ function uc_gc_client_billing_request($order_id, $request_id) {
 
   // This lets us know it's a legitimate access of the complete page.
   $_SESSION['uc_checkout'][$_SESSION['cart_order']]['do_complete'] = TRUE;
-  drupal_goto('cart/checkout/complete');
+  backdrop_goto('cart/checkout/complete');
 }
 
 /**
@@ -165,8 +165,8 @@ function uc_gc_client_billing_request($order_id, $request_id) {
  *   presented with an option to continue by creating a debit.
  */
 function uc_gc_client_billing_request_exit() {
-  drupal_set_message(t('We are sorry but it looks like Instant Payments are not available for your bank. Please try again using the option to pay by debit. If you are unable to do this then contact the site administrator for further assistance.'), 'warning');
-  drupal_goto('cart/checkout');
+  backdrop_set_message(t('We are sorry but it looks like Instant Payments are not available for your bank. Please try again using the option to pay by debit. If you are unable to do this then contact the site administrator for further assistance.'), 'warning');
+  backdrop_goto('cart/checkout');
 }
 
 /**
@@ -190,21 +190,21 @@ function uc_gc_client_billing_request_exit() {
 function uc_gc_client_redirect($redirect, $mandate, $customer, $order_id, $payment_method, $start_date = NULL, $cart_id = 0) {
 
   if (intval($_SESSION['cart_order']) != $order_id) {
-    drupal_set_message(t('Thank you for your order! GoCardless will notify us once your payment has been processed.'));
-    drupal_goto('cart');
+    backdrop_set_message(t('Thank you for your order! GoCardless will notify us once your payment has been processed.'));
+    backdrop_goto('cart');
   }
 
   // Ensure the payment method is GoCardless.
   $order = uc_order_load($order_id);
   if ($order->payment_method != 'gc_client') {
-    drupal_goto('cart');
+    backdrop_goto('cart');
   }
 
   // Let customer know mandate has been created.
   $uid = $order->uid;
   $comment = t('Your new debit mandate @mandate has been created by GoCardless.', array('@mandate' => $mandate));
   uc_order_comment_save($order_id, $uid, $comment, 'order', 'Pending', TRUE);
-  drupal_set_message($comment);
+  backdrop_set_message($comment);
 
   // @todo Apply some logic here to group products into single payments / subscriptions if applicable
   // Set up seperate payments / subscriptions for each product in cart.
@@ -234,7 +234,7 @@ function uc_gc_client_redirect($redirect, $mandate, $customer, $order_id, $payme
       'created' => $created,
       'start_date' => $start_date,
       'updated' => $created,
-      'sandbox' => variable_get('uc_gc_client_sandbox', TRUE),
+      'sandbox' => config_get('uc_gc_client.settings', 'sandbox'),
     );
     db_insert('uc_gc_client')
       ->fields($data)
@@ -245,8 +245,8 @@ function uc_gc_client_redirect($redirect, $mandate, $customer, $order_id, $payme
     // If it is a subscription.
     if ($gc_type == 'S') {
       $calculate = uc_gc_client_price_calculate($order, $product->order_product_id, NULL, NULL);
-      $currency_code = isset($calculate['currency']) ? $calculate['currency'] : variable_get('uc_currency_code');
-      $currency_sign = isset($calculate['sign']) ? $calculate['sign'] : variable_get('uc_currency_sign');
+      $currency_code = isset($calculate['currency']) ? $calculate['currency'] : config_get('uc_store.settings', 'uc_currency_code');
+      $currency_sign = isset($calculate['sign']) ? $calculate['sign'] : config_get('uc_store.settings', 'uc_currency_sign');
       $payment_details = array(
         'amount' => $calculate['amount'],
         'currency' => $currency_code,
@@ -259,7 +259,7 @@ function uc_gc_client_redirect($redirect, $mandate, $customer, $order_id, $payme
       );
       // Provide hook so that payment details can be altered by another module.
       $type = 'subscription';
-      drupal_alter('payment_details', $payment_details, $order, $type);
+      backdrop_alter('payment_details', $payment_details, $order, $type);
 
       $params = array(
         'endpoint' => 'subscriptions',
@@ -289,11 +289,11 @@ function uc_gc_client_redirect($redirect, $mandate, $customer, $order_id, $payme
         );
         $comment = t('Your @interval @interval_unit subscription plan of @amount for @product has been created with GoCardless, and the first payment will be made from your bank on @start_date.', $comment_arr);
         uc_order_comment_save($order_id, $uid, $comment, 'order', 'Pending', TRUE);
-        drupal_set_message($comment);
+        backdrop_set_message($comment);
       }
       else {
         if (!isset($result->response) || !$result->response || $result->response->status_code == 500) {
-          drupal_set_message(t('There was a problem creating your subscription at GoCardless, so we will resubmit it later.'), 'warning');
+          backdrop_set_message(t('There was a problem creating your subscription at GoCardless, so we will resubmit it later.'), 'warning');
           db_update('uc_gc_client')
             ->fields(array(
               'next_payment' => $created,
@@ -304,7 +304,7 @@ function uc_gc_client_redirect($redirect, $mandate, $customer, $order_id, $payme
           uc_order_save($order);
         }
         else {
-          drupal_set_message(t('Something went wrong creating your subscription with GoCardless. Please contact the site administrator for assistance.'), 'error');
+          backdrop_set_message(t('Something went wrong creating your subscription with GoCardless. Please contact the site administrator for assistance.'), 'error');
         }
       }
     }
@@ -315,8 +315,8 @@ function uc_gc_client_redirect($redirect, $mandate, $customer, $order_id, $payme
       // immediately.
       if ($product_uc->raise_payment) {
         $calculate = uc_gc_client_price_calculate($order, $product->order_product_id, NULL, NULL);
-        $currency_code = isset($calculate['currency']) ? $calculate['currency'] : variable_get('uc_currency_code');
-        $currency_sign = isset($calculate['sign']) ? $calculate['sign'] : variable_get('uc_currency_sign');
+        $currency_code = isset($calculate['currency']) ? $calculate['currency'] : config_get('uc_store.settings', 'uc_currency_code');
+        $currency_sign = isset($calculate['sign']) ? $calculate['sign'] : config_get('uc_store.settings', 'uc_currency_sign');
         $order->data['initial_payment'] = uc_currency_format($calculate['amount'], $currency_sign);
         uc_order_save($order);
         $payment_details = array(
@@ -331,7 +331,7 @@ function uc_gc_client_redirect($redirect, $mandate, $customer, $order_id, $payme
         // Provide hook so that payment details can be altered by another
         // module.
         $type = 'payment';
-        drupal_alter('payment_details', $payment_details, $order, $type);
+        backdrop_alter('payment_details', $payment_details, $order, $type);
 
         $uuid = uc_gc_client_uuid_generate();
         $params = array(
@@ -365,14 +365,14 @@ function uc_gc_client_redirect($redirect, $mandate, $customer, $order_id, $payme
           );
           $comment = t('An initial payment of @amount for @product has been created with GoCardless, and will be made from your bank on @charge_date.', $comment_array);
           uc_order_comment_save($order_id, $uid, $comment, 'order', 'Pending', TRUE);
-          drupal_set_message($comment);
+          backdrop_set_message($comment);
 
           // Provide a hook so that other modules can respond to payment
           // creation.
           module_invoke_all('payment_created', $payment, $order_id, 'checkout');
         }
         else {
-          drupal_set_message(t('An initial payment could not be created because authentication failed. We will try and raise it again later.'), 'warning');
+          backdrop_set_message(t('An initial payment could not be created because authentication failed. We will try and raise it again later.'), 'warning');
 
           // Update next_payment to now so that it will get picked up on next
           // cron run.
@@ -404,8 +404,8 @@ function uc_gc_client_redirect($redirect, $mandate, $customer, $order_id, $payme
           ->execute();
 
         $calculate = uc_gc_client_price_calculate($order, $product->order_product_id, NULL, NULL);
-        $currency_code = isset($calculate['currency']) ? $calculate['currency'] : variable_get('uc_currency_code');
-        $currency_sign = isset($calculate['sign']) ? $calculate['sign'] : variable_get('uc_currency_sign');
+        $currency_code = isset($calculate['currency']) ? $calculate['currency'] : config_get('uc_store.settings', 'uc_currency_code');
+        $currency_sign = isset($calculate['sign']) ? $calculate['sign'] : config_get('uc_store.settings', 'uc_currency_sign');
         $order->data['initial_payment'] = uc_currency_format($calculate['amount'], $currency_sign);
         uc_order_save($order);
 
@@ -415,14 +415,14 @@ function uc_gc_client_redirect($redirect, $mandate, $customer, $order_id, $payme
           '@start_date' => format_date($start_date, 'uc_store'),
         ));
         uc_order_comment_save($order_id, $uid, $comment, 'order', 'Pending', TRUE);
-        drupal_set_message($comment);
+        backdrop_set_message($comment);
       }
     }
   }
 
   // This lets us know it's a legitimate access of the complete page.
   $_SESSION['uc_checkout'][$_SESSION['cart_order']]['do_complete'] = TRUE;
-  drupal_goto('cart/checkout/complete');
+  backdrop_goto('cart/checkout/complete');
 }
 
 /**
@@ -445,8 +445,7 @@ function uc_gc_client_start_date($product_uc) {
     }
     else {
       // Get the first available day of month if configurred. 
-      if (variable_get('uc_gc_client_dom')) {
-        $doms = variable_get('uc_gc_client_dom');
+      if ($doms = config_get('uc_gc_client.settings', 'dom')) {
         if (!empty($doms)) {
           $est_charge_date = uc_gc_client_working_days_calculate('+', 4, date('Y-m-d'));
           $doms = explode(', ', $doms);
@@ -530,7 +529,8 @@ function uc_gc_client_hash_equals($known_string, $user_string) {
  * Menu callback; respond to a webhook from GoCardless.
  */
 function uc_gc_client_webhook() {
-  variable_get('uc_gc_client_sandbox') ? $secret = variable_get('uc_gc_client_webhook_sandbox') : $secret = variable_get('uc_gc_client_webhook_live');
+  $config = config('uc_gc_client.settings');
+  $secret = $config->get('sandbox') ? $config->get('webhook_sandbox') : $config->get('webhook_live');
   $webhook = file_get_contents('php://input');
   $headers = function_exists('getallheaders') ? getallheaders() : uc_gc_client_getallheaders();
   $provided_signature = $headers["Webhook-Signature"];
@@ -540,14 +540,14 @@ function uc_gc_client_webhook() {
   if ($hash_equals_function($provided_signature, $calculated_signature)) {
     $data = json_decode($webhook, TRUE);
     // Optionally write webhook to log.
-    if (variable_get('uc_gc_client_debug_webhook', FALSE)) {
+    if ($config->get('debug_webhook')) {
       $message = '<pre>' . t('GoCardless webhook:') . '<br />' . print_r($data, TRUE) . '</pre>';
       watchdog("uc_gc_client", $message);
     }
 
     // Send a success header before processing webhooks, in order to
     // prevent timeouts.
-    drupal_add_http_header('Status', '200 OK');
+    backdrop_add_http_header('Status', '200 OK');
 
     // Process the events.
     foreach ($data['events'] as $event) {
@@ -601,7 +601,7 @@ function uc_gc_client_webhook() {
     }
   }
   else {
-    drupal_add_http_header('Status', '498 Invalid Token');
+    backdrop_add_http_header('Status', '498 Invalid Token');
   }
 }
 

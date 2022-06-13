@@ -54,7 +54,7 @@ function hook_payment_details_alter(array &$payment_details, $order, $type) {
  */
 function hook_payment_created($payment, $order_id, $op) {
 
-  drupal_set_message(t("The payment's status is @status", array(
+  backdrop_set_message(t("The payment's status is @status", array(
     '@status' => $payment->status,
   )));
 }
