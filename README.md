@@ -12,8 +12,8 @@ Requirements
 
 This module requires that the following modules are also enabled:
 
- * Ubercart Payment (https://www.drupal.org/project/ubercart)
- * Ubercart Product Attibutes (https://www.drupal.org/project/ubercart)
+ * Ubercart Payment (https://backdropcms.org/project/ubercart)
+ * Ubercart Product Attibutes (https://backdropcms.org/project/ubercart)
 
 
 Installation

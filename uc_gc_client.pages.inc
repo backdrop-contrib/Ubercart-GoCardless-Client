@@ -59,11 +59,22 @@ function uc_gc_client_billing_request($order_id, $request_id) {
     $payment = $billing_request->payment_request;
     $payment_amount = $payment->amount / 100;
     $country_code = $billing_request->resources->customer_bank_account->country_code;
-    $currency_symbol = uc_gc_client_currency($country_code)['sign'];
+    $gc_currency = uc_gc_client_currency($country_code);
+    $currency_symbol = $gc_currency['sign'];
+    $default_currency = config_get('uc_store.settings', 'uc_currency_code');
+
+    if ($default_currency != $gc_currency['currency']) {
+      backdrop_set_message(t("The price of your order has been converted from @default_currency to @currency using the real currency exchange rates provided by GoCardless.", array(
+       '@default_currency' => $default_currency,
+       '@currency' => $gc_currency['currency'],
+      )));
+    }
+
     $payment_comment = t('GoCardless @payment_type payment ID @payment_id created.', array(
       '@payment_id' => $billing_request->payment_request->links->payment,
       '@payment_type' => $billing_request->fallback_occurred ? 'One-off' : 'Instant', 
     ));
+
     if (!$billing_request->fallback_occurred) { 
       $order_comment = t('You have made an Instant payment of @amount via GoCardless for your order #@order_id.', array(
         '@order_id' => $order_id,
@@ -144,7 +155,7 @@ function uc_gc_client_billing_request($order_id, $request_id) {
         $message = t("The next recurring payment of @amount for '@product_title' has been scheduled for @next_payment_date.", array(
           '@amount' => uc_currency_format($calculate['amount'], $currency_symbol),
           '@product_title' => $product->title,
-          '@next_payment_date' => format_date($next_payment, 'uc_store'),
+          '@next_payment_date' => format_date($next_payment, 'date_only'),
         ));
         backdrop_set_message($message);
         uc_order_comment_save($order_id, $uid, $message, 'order', 'Completed', TRUE);
@@ -206,11 +217,13 @@ function uc_gc_client_redirect($redirect, $mandate, $customer, $order_id, $payme
   uc_order_comment_save($order_id, $uid, $comment, 'order', 'Pending', TRUE);
   backdrop_set_message($comment);
 
-  // @todo Apply some logic here to group products into single payments / subscriptions if applicable
+  // @todo Apply some logic here to group products into single payments /
+  // subscriptions if applicable
+
   // Set up seperate payments / subscriptions for each product in cart.
-  foreach ($order->products as $product) {
+  foreach ($order->products as $product_id => $product) {
     $ucpid = $product->order_product_id;
-    $product->data['gc_auth_type'] == 'subscription' ? $gc_type = 'S' : $gc_type = 'P';
+    $gc_type = $product->data['gc_auth_type'] == 'subscription' ? 'S' : 'P';
 
     $product_uc = db_select('uc_gc_client_products', 'p')
       ->fields('p')
@@ -218,7 +231,7 @@ function uc_gc_client_redirect($redirect, $mandate, $customer, $order_id, $payme
       ->execute()->fetch();
 
     // Obtain start date.
-    $start_date = uc_gc_client_start_date($product_uc);
+    $start_date = uc_gc_client_start_date($product_uc, $mandate);
 
     // Insert info about the order into the database.
     $created = REQUEST_TIME;
@@ -277,17 +290,19 @@ function uc_gc_client_redirect($redirect, $mandate, $customer, $order_id, $payme
         $params['start_date'] = format_date($start_date, 'gocardless');
       }
       $result = uc_gc_client_api($params);
-
       if ($result->response->status_code == 201) {
+        if (isset($calculate['currency']) && $product_id === array_key_first($order->products)) {
+          uc_gc_client_calculate_conversion_message($calculate);
+        }
         $sub = $result->response->body->subscriptions;
         $comment_arr = array(
           '@product' => $product->title,
           '@interval' => $sub->interval,
           '@interval_unit' => $sub->interval_unit,
           '@amount' => uc_currency_format($sub->amount / 100, $currency_sign),
-          '@start_date' => format_date(strtotime($sub->start_date), 'uc_store'),
+          '@start_date' => format_date(strtotime($sub->start_date), 'date_only'),
         );
-        $comment = t('Your @interval @interval_unit subscription plan of @amount for @product has been created with GoCardless, and the first payment will be made from your bank on @start_date.', $comment_arr);
+        $comment = t("Your @interval @interval_unit subscription plan of @amount for '@product' has been created with GoCardless, and the first payment will be made from your bank on @start_date.", $comment_arr);
         uc_order_comment_save($order_id, $uid, $comment, 'order', 'Pending', TRUE);
         backdrop_set_message($comment);
       }
@@ -309,11 +324,11 @@ function uc_gc_client_redirect($redirect, $mandate, $customer, $order_id, $payme
       }
     }
 
-    // If it is one-off Payments.
+    // If it is a "One-off" or Instant payment.
     elseif ($gc_type != 'S') {
-      // If raise_payment is set for the product then raise the first payment
-      // immediately.
-      if ($product_uc->raise_payment) {
+      // If it is an Instant Payment product, or raise_payment is set for the
+      // product then raise the first payment immediately.
+      if ($product_uc->type == 'I' || $product_uc->raise_payment) {
         $calculate = uc_gc_client_price_calculate($order, $product->order_product_id, NULL, NULL);
         $currency_code = isset($calculate['currency']) ? $calculate['currency'] : config_get('uc_store.settings', 'uc_currency_code');
         $currency_sign = isset($calculate['sign']) ? $calculate['sign'] : config_get('uc_store.settings', 'uc_currency_sign');
@@ -322,7 +337,7 @@ function uc_gc_client_redirect($redirect, $mandate, $customer, $order_id, $payme
         $payment_details = array(
           'amount' => $calculate['amount'],
           'currency' => $currency_code,
-          'description' => 'Initial payment for ' . $product->title,
+          'description' => 'Payment for ' . $product->title,
           'metadata' => array(
             'ucpid' => $ucpid,
           ),
@@ -347,6 +362,9 @@ function uc_gc_client_redirect($redirect, $mandate, $customer, $order_id, $payme
         $result = uc_gc_client_api($params);
 
         if ($result->response->status_code == 201) {
+          if (isset($calculate['currency']) && $product_id === array_key_first($order->products)) {
+            uc_gc_client_calculate_conversion_message($calculate);
+          }
           // Update next_payment field in gc_client table.
           $payment = $result->response->body->payments;
           $next_payment = isset($interval) ? strtotime('+' . $interval['string']) : NULL;
@@ -359,11 +377,12 @@ function uc_gc_client_redirect($redirect, $mandate, $customer, $order_id, $payme
 
           // Let everyone know what is going on.
           $comment_array = array(
+            '@descriptor' => $product_uc->type == 'P' ? 'An initial' : 'A',
             '@amount' => uc_currency_format($payment->amount / 100, $currency_sign),
-            '@charge_date' => date('D d M Y', strtotime($result->response->body->payments->charge_date)),
+            '@charge_date' => format_date(strtotime($result->response->body->payments->charge_date), 'date_only'),
             '@product' => $product->title,
           );
-          $comment = t('An initial payment of @amount for @product has been created with GoCardless, and will be made from your bank on @charge_date.', $comment_array);
+          $comment = t("@descriptor payment of @amount for '@product' has been created with GoCardless, and will be made from your bank on @charge_date.", $comment_array);
           uc_order_comment_save($order_id, $uid, $comment, 'order', 'Pending', TRUE);
           backdrop_set_message($comment);
 
@@ -372,7 +391,7 @@ function uc_gc_client_redirect($redirect, $mandate, $customer, $order_id, $payme
           module_invoke_all('payment_created', $payment, $order_id, 'checkout');
         }
         else {
-          backdrop_set_message(t('An initial payment could not be created because authentication failed. We will try and raise it again later.'), 'warning');
+          backdrop_set_message(t('Your payment could not be created because authentication failed. We will try and raise it again later.'), 'warning');
 
           // Update next_payment to now so that it will get picked up on next
           // cron run.
@@ -410,9 +429,14 @@ function uc_gc_client_redirect($redirect, $mandate, $customer, $order_id, $payme
         uc_order_save($order);
 
         // Let everyone know what is going on.
-        $comment = t('A payment for @amount will be created with GoCardless on @start_date.', array(
+        if (isset($calculate['currency']) && $product_id === array_key_first($order->products)) {
+          uc_gc_client_calculate_conversion_message($calculate);
+        }
+        $comment = t("@descriptor payment of @amount for '@product' will be created with GoCardless on @start_date.", array(
+          '@descriptor' => $product_uc->type == 'P' ? 'An initial' : 'A',
           '@amount' => uc_currency_format($calculate['amount'], $currency_sign),
-          '@start_date' => format_date($start_date, 'uc_store'),
+          '@product' => $product->title,
+          '@start_date' => format_date($start_date, 'date_only'),
         ));
         uc_order_comment_save($order_id, $uid, $comment, 'order', 'Pending', TRUE);
         backdrop_set_message($comment);
@@ -426,15 +450,31 @@ function uc_gc_client_redirect($redirect, $mandate, $customer, $order_id, $payme
 }
 
 /**
+ * Sets a message informing customer that currency has been converted.
+ *
+ * @param array $calculate
+ *   The price calculation array data.
+ */
+function uc_gc_client_calculate_conversion_message($calculate) {
+  backdrop_set_message(t("The amount to pay for your order has been converted from @default_sign to @sign using the real currency exchange rates provided by GoCardless.", array(
+    '@default_sign' => $calculate['default_currency'],
+    '@sign' => $calculate['currency'],
+  )));
+}
+
+/**
  * Returns a start date for one-off or subscription payments.
  *
  * @param object $product_uc
  *   The Ubercart Product GoCardless configuration data.
  *
+ * @param string $mandate
+ *   The GoCardless mandate Id.
+ *
  * @return mixed
  *   The start date as a Unix timestamp, or NULL.
  */
-function uc_gc_client_start_date($product_uc) {
+function uc_gc_client_start_date($product_uc, $mandate) {
   if ($product_uc->raise_payment) {
     $start_date = REQUEST_TIME;
   }
@@ -559,13 +599,6 @@ function uc_gc_client_webhook() {
             $resource = array();
             uc_gc_client_webhook_mandates($order, $event['action'], $event);
           }
-          break;
-
-        case 'subscriptions':
-          $order_id = uc_gc_client_id($event['links']['mandate']);
-          $order = uc_order_load($order_id);
-          $resource = array();
-          uc_gc_client_webhook_subscriptions($order, $event['action'], $event);
           break;
 
         case 'payments':
@@ -776,17 +809,4 @@ function uc_gc_client_webhook_instant_payments($action, array $event, $resource)
       }
     }
   }
-}
-
-/**
- * Processes 'subscription' webhooks.
- *
- * @param object $order
- *   The Ubercart Order that the webhook pertains to.
- * @param string $action
- *   The action type of GoCardless webhook event.
- * @param array $event
- *   The GoCardless webhook event.
- */
-function uc_gc_client_webhook_subscriptions($order, $action, array $event) {
 }

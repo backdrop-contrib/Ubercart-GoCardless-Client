@@ -167,7 +167,7 @@ function uc_gc_client_uc_payment_method_callback($op, &$order, $form = NULL, &$f
         '#type' => 'checkbox',
         '#title' => t('Hide Payments tab'),
         '#default_value' => $config->get('payments_tab'),
-        '#description' => t('Ubercart Payments do not work with GoCardless, so checking this will hide the Payments tab when viewing any orders created through GoCardless.'),
+        '#description' => t('Checking this will hide the Payments tab when viewing orders in Admin mode. The tab will <em>not</em> be hidden if an order is paid for with an Instant payment, and does not have a mandate associated with it.'),
       );
       $currencies_description = '<p>' . t("If you use this option, mandates and payments will be created in the appropriate currency based on the country provided by the customer in their billing address. The payment amount for customers using the non-default store currency will be automatically adjusted using current real exchange rates provided by the GoCardless API. You must use <a href='/admin/store/settings/countries/gocardless'>this form</a> to set which countries can be used with GoCardless during checkout. Do not use this option if your store is set up to use multiple currencies anyway. To create payments in foreign currencies you must either enable the appropriate scheme(s), or anable FX payments for your GoCardless account. Enabling FX payments will allow you to collect payments in all the currencies covered by GoCardless. To enable these you need to contact help@gocardless.com.") . '</p>';
       if ($connected) {
@@ -604,9 +604,9 @@ function uc_gc_client_node_view($node, $view_mode, $langcode) {
       ->fetchAssoc();
 
     if ($extras['start_date']) {
-      $start_date = format_date($extras['start_date'], 'uc_store');
+      $start_date = format_date($extras['start_date'], 'date_only');
       $node->content['start_date'] = array(
-        '#markup' => '<p>' . t('Your first debit payment will be paid on') . '<b>' . $start_date . '</b>.</p>',
+        '#markup' => '<p>' . t('Your first debit payment will be paid on ') . '<b>' . $start_date . '</b>.</p>',
         '#value' => $start_date,
       );
     }

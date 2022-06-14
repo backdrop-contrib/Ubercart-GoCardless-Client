@@ -141,8 +141,8 @@ function uc_gc_client_payments_form($form, &$form_state, $order) {
     $rows[$product->order_product_id] = array(
       $product_select[$ucpid],
       $type,
-      uc_currency_format($product->cost),
-      uc_currency_format($product->price),
+      uc_currency_format($product->cost * $product->qty),
+      uc_currency_format($product->price * $product->qty),
       $interval == ' ' ? t('Not set') : $interval,
       $mandate->status != 'cancelled' && !is_null($gc->next_payment) ? format_date($gc->next_payment, 'medium') : '-',
       !is_null($mandate->next_possible_charge_date) ? format_date(strtotime($mandate->next_possible_charge_date), 'uc_store') : '-',
@@ -316,6 +316,7 @@ function uc_gc_client_payments_form($form, &$form_state, $order) {
   $form['create_payment']['payment_amount'] = array(
     '#type' => 'uc_price',
     '#title' => t('Amount'),
+    '#description' => t('Provide amount in default currency. It the order was created using a foreign currency then the amount will be automatically recalculated using the latest exchange rates provided by GoCardless.'),
   );
   $form['create_payment']['payment_title'] = array(
     '#type' => 'textfield',
@@ -323,10 +324,10 @@ function uc_gc_client_payments_form($form, &$form_state, $order) {
   );
   $form['create_payment']['charge_date'] = array(
     '#title' => t('Charge customer at'),
-    '#type' => module_exists('date_popup') ? 'date_popup' : 'date_select',
-    '#date_format' => module_exists('date_popup') ? config_get('system.date', 'format.uc_store') : 'd M Y',
+    '#type' => 'date_popup',
+    '#date_format' => 'd M Y',
     '#default_value' => date('Y-m-d', strtotime($mandate->next_possible_charge_date)),
-    '#date_year_range' => '0:+1',
+    '#date_year_range' => '0:+2',
     '#datepicker_options' => array('minDate' => 0),
   );
   $form['create_payment']['payment_submit'] = array(
@@ -370,9 +371,9 @@ function uc_gc_client_payments_form($form, &$form_state, $order) {
     '#title' => t('Schedule adjustments'),
     '#collapsible' => TRUE,
     '#collapsed' => TRUE,
-    '#description' => '<p>' . t('Make a temporary change to the payment amount that is created with GoCardless.') . '</p>',
+    '#description' => '<p>' . t('Adjust the amounts for upcoming scheduled One-off payments.') . '</p>',
     '#prefix' => '<div id="adjustments"></div>',
-    '#access' => $gc->type == 'P' ? TRUE : FALSE,
+    '#access' => $gc->type == 'P' && $product->data['interval_params']['length'] ? TRUE : FALSE,
   );
   if (isset($adj_rows)) {
     $form['adjust']['adjust_table'] = array(
@@ -410,7 +411,7 @@ function uc_gc_client_payments_form($form, &$form_state, $order) {
   $form['adjust']['adjustment'] = array(
     '#type' => 'uc_price',
     '#title' => t('Adjustment amount'),
-    '#description' => t('This will adjust the amount of bill submitted to GoCardless.'),
+    '#description' => t("This will adjust the amount of the payment that GoCardless is instructed to create on the specified date(s). Adjustments are set in the site's default currency, regardless of the customer's country."),
   );
   $form['adjust']['payments'] = array(
     '#type' => 'textfield',
@@ -423,7 +424,7 @@ function uc_gc_client_payments_form($form, &$form_state, $order) {
     '#type' => 'radios',
     '#title' => t('Starting from'),
     '#options' => array(
-      t('Next billing day'),
+      t('Next scheduled payment creation date'),
       t('Select another date'),
     ),
     '#default_value' => 0,
@@ -431,7 +432,7 @@ function uc_gc_client_payments_form($form, &$form_state, $order) {
   $form['adjust']['starting'] = array(
     '#type' => 'date_popup',
     '#title' => t('Starting from'),
-    '#description' => t('The adjustment will begin on the first scheduled billing date after that specified here.'),
+    '#description' => t('The adjustment(s) will begin on the first scheduled payment creation date after that specified here.'),
     '#date_format' => 'd M Y',
     '#date_year_range' => '0:+1',
     '#datepicker_options' => array('minDate' => 0),
@@ -673,14 +674,15 @@ function uc_gc_client_validate_adjs($order, $ucpid, array $dates, $amount) {
     $db_query = "SELECT s.ucid, s.date, sum( a.amount ) AS sum FROM {uc_gc_client_schedules} s inner join {uc_gc_client_schedules_adjs} a on s.sid = a.sid WHERE s.status = 1 AND s.date = '" . $date . "' AND s.ucpid = " . $order->order_id;
     $result = db_query($db_query)
       ->fetch();
-    is_null($result->sum) ? $sum = 0 : $sum = $result->sum;
+    $sum = is_null($result->sum) ? 0 : $result->sum;
 
     // Provide a hook so that $amount and/or $price can be altered by another
     // module.
-    $price = $order->order_total;
+    $price = $order->products[$ucpid]->price;
     backdrop_alter('adjs_validate', $amount, $price, $date, $order->order_id);
     $sum = $sum + $amount + $price;
 
+    $warning = FALSE;
     if ($sum < 1 && $sum != 0) {
       backdrop_set_message(t('The schedule cannot be placed because the sum of scheduled adjustments, plus the price of the product, for @date is less than @amount, which is not allowed by GoCardless', array(
         '@date' => $date,
@@ -774,12 +776,18 @@ function uc_gc_client_scheduled_action_submit($form, &$form_state) {
 function uc_gc_client_create_payment_validate($form, &$form_state) {
   $mandate = $form_state['values']['mandate'];
   $amount = $form_state['values']['payment_amount'];
+  $order_id = $form_state['values']['order_id'];
+  $order = uc_order_load($order_id);
+  $ucpid = $form_state['values']['ucpid'];
+  $data = array('amount' => $amount);
+  $calculate = uc_gc_client_price_calculate($order, $ucpid, FALSE, FALSE, $data); 
+  $form_state['storage']['calculate'] = $calculate;
   if ($amount == 0) {
     form_set_error('payment_amount', t('Please provide an amount'));
   }
-  elseif ($amount < 1) {
-    form_set_error('payment_amount', t('The minimum bill amount for GoCardless id @amount', array(
-      '@amount' => uc_currency_format(1),
+  elseif ($calculate['amount'] < 1) {
+    form_set_error('payment_amount', t('The minimum payment amount for GoCardless is @amount', array(
+      '@amount' => uc_currency_format(1, $calculate['sign']),
     )));
   }
 
@@ -801,13 +809,13 @@ function uc_gc_client_create_payment_submit($form, &$form_state) {
   $order_id = $form_state['values']['order_id'];
   $order = uc_order_load($order_id);
   $ucpid = $form_state['values']['ucpid'];
-  // $ucpid = $form_state['values']['payment_product_id'];.
+  $calculate = $form_state['storage']['calculate'];
   $params = array(
     'endpoint' => 'payments',
     'action' => 'create',
     'mandate' => $mandate->id,
-    'amount' => $amount,
-    'currency' => config_get('uc_store.settings', 'uc_currency_code'),
+    'amount' => $calculate['amount'],
+    'currency' => isset($calculate['currency']) ? $calculate['currency'] : config_get('uc_store.settings', 'uc_currency_code'),
     'description' => !empty($form_state['values']['payment_title']) ? $form_state['values']['payment_title'] : $order->products[$ucpid]->title,
     'charge_date' => $form_state['values']['charge_date'],
     'metadata' => array(
@@ -818,7 +826,7 @@ function uc_gc_client_create_payment_submit($form, &$form_state) {
   $payment = $result->response->body->payments;
 
   $text = t('A one-off payment for @amount has been created by Admin with GoCardless mandate @mandate.', array(
-    '@amount' => uc_currency_format($amount),
+    '@amount' => uc_currency_format($calculate['amount'], $calculate['sign']),
     '@mandate' => $mandate->id,
   ));
   backdrop_set_message(t('@text', array('@text' => $text)));

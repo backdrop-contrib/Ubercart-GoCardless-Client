@@ -142,22 +142,25 @@ function uc_gc_client_menu() {
  * Implements hook_menu_local_tasks_alter().
  *
  * Removes the Payments tab from an order's View pane if the module is
- * configured to do this on the settings form, or if the payment type is
- * not GoCardless.
+ * configured to do this on the settings form, and the order has been created
+ * with a Redirect Request, and is not an Instant payment.
  */
 function uc_gc_client_menu_local_tasks_alter(&$data, $router_item, $root_path) {
   if (strpos($root_path, 'admin/store/orders/%') !== FALSE) {
-    $config = config('uc_gc_client.settings');
-    if ($config->get('payments_tab')) {
-      $payment_method = db_select('uc_orders', 'o')
+    if (config_get('uc_gc_client.settings', 'payments_tab')) {
+      if (db_select('uc_orders', 'o')
         ->fields('o', array('payment_method'))
         ->condition('order_id', arg(3))
-        ->execute()->fetchField();
-      if ($payment_method == 'gc_client') {
-        if (isset($data['tabs'][0])) {
-          foreach ($data['tabs'][0]['output'] as $key => $output) {
-            if ($output['#link']['title'] == 'Payments') {
-              unset($data['tabs'][0]['output'][$key]);
+        ->execute()->fetchField() == 'gc_client') {
+        if (db_select('uc_gc_client', 's')
+          ->fields('s')
+          ->condition('ucid', arg(3))
+          ->execute()->fetch()) {
+          if (isset($data['tabs'][0])) {
+            foreach ($data['tabs'][0]['output'] as $key => $output) {
+              if ($output['#link']['title'] == 'Payments') {
+                unset($data['tabs'][0]['output'][$key]);
+              }
             }
           }
         }
@@ -332,8 +335,8 @@ function uc_gc_client_checkout_form_submit($form, $form_state) {
 
     // Obtain the amount, currency, and scheme.
     $calculated_total = 0;
-    foreach ($order->products as $product) {
-      $calculate = uc_gc_client_price_calculate($order, $product->order_product_id); 
+    foreach ($order->products as $product_id => $product) {
+      $calculate = uc_gc_client_price_calculate($order, $product_id); 
       $calculated_total += $calculate['amount'];
     }
     $currency = isset($calculate['currency']) ? $calculate['currency'] : $order->currency;
@@ -1129,7 +1132,7 @@ function uc_gc_client_price_calculate($order, $ucpid, $next_paymentdate = FALSE,
     // one product in the order.
   }
 
-  $amount = $data ? $data['amount'] : $product->price;
+  $amount = $data ? $data['amount'] : $product->price * $product->qty;
   $amount = ($amount + $adjs_total + $line_items) * $price_x;
 
   // Modify payment amount and currency if international customer.
@@ -1155,15 +1158,11 @@ function uc_gc_client_price_calculate($order, $ucpid, $next_paymentdate = FALSE,
       else {
         $exchange_rates = $result->response->body->currency_exchange_rates;
         $amount *= $exchange_rates[0]->rate;
-        if ($next_paymentdate && $status) {
-          backdrop_set_message(t("The amount for '@title' has been converted to @amount using the real currency exchange rates provided by GoCardless.", array(
-            '@amount' => uc_currency_format($amount, $currency_arr['sign']),
-            '@title' => $product->title,
-          )));
-        }
       }
       $calcs_array['currency'] = $currency_arr['currency'];
       $calcs_array['sign'] = $currency_arr['sign'];
+      $calcs_array['default_currency'] = $default_currency;
+      $calcs_array['default_sign'] = config_get('uc_store.settings', 'uc_currency_sign');
       $calcs_array['region'] = $currency_arr['region'];
     }
   }
