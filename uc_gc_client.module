@@ -143,7 +143,7 @@ function uc_gc_client_menu() {
  *
  * Removes the Payments tab from an order's View pane if the module is
  * configured to do this on the settings form, and the order has been created
- * with a Redirect Request, and is not an Instant payment.
+ * with a Redirect Request, rather than a Billing Request.
  */
 function uc_gc_client_menu_local_tasks_alter(&$data, $router_item, $root_path) {
   if (strpos($root_path, 'admin/store/orders/%') !== FALSE) {
@@ -152,10 +152,10 @@ function uc_gc_client_menu_local_tasks_alter(&$data, $router_item, $root_path) {
         ->fields('o', array('payment_method'))
         ->condition('order_id', arg(3))
         ->execute()->fetchField() == 'gc_client') {
-        if (db_select('uc_gc_client', 's')
-          ->fields('s')
+        if (strpos(db_select('uc_gc_client', 's')
+          ->fields('s', array('gcrid'))
           ->condition('ucid', arg(3))
-          ->execute()->fetch()) {
+          ->execute()->fetchField(), 'RE') !== false) {
           if (isset($data['tabs'][0])) {
             foreach ($data['tabs'][0]['output'] as $key => $output) {
               if ($output['#link']['title'] == 'Payments') {
@@ -665,7 +665,7 @@ function uc_gc_client_uc_order_pane() {
   );
   $panes['gc_client'] = array(
     'callback' => 'uc_gc_client_uc_order_pane_callback',
-    'title' => t('Go Cardless'),
+    'title' => t('GoCardless'),
     'desc' => t('Information on GoCardless order'),
     'class' => 'pos-left',
     'weight' => 4,
@@ -690,33 +690,36 @@ function uc_gc_client_uc_order_pane() {
 function uc_gc_client_uc_order_pane_callback($op, $order) {
   switch ($op) {
     case 'view':
-      // Todo this doesn't work if there is more than one product in order.
       $query = db_select('uc_gc_client', 'g');
-      $gc = $query
+      if ($gcs = $query
         ->fields('g')
-        ->condition('ucid', $order->order_id, '=')
-        ->execute()->fetch();
-
-      if ($gc) {
+        ->condition('ucid', $order->order_id)
+        ->execute()->fetchAll()) {
+        $gc = reset($gcs);
         $build = 'Mandate ID: ' . $gc->gcid . '<br />';
         $build .= 'Created: ' . format_date($gc->created, 'uc_store') . '<br />';
-        $gc->status == 'completed' ? $status = 'Active' : $status = $gc->status;
+        $status = $gc->status == 'completed' ? 'Active' : $gc->status;
         $build .= 'Status: ' . $status . '<br />';
-        $gc->type == 'P' ? $type = 'Payments' : $type = 'Subscription';
-        $build .= 'Type: ' . $type . '<br />';
-        !is_null($gc->start_date) ? $start = format_date($gc->start_date, 'uc_store') . '<br />' : $start = 'Not set<br />';
-        $build .= 'Start: ' . $start;
-        if (isset($order->products[$gc->ucpid]->data['interval_params'])) {
-          $params = $order->products[$gc->ucpid]->data['interval_params'];
-          $interval = $params['length'] . ' ' . $params['unit'];
+        if (count($gcs) > 1) {
+          $build .= 'Type: Multiple products';
         }
         else {
-          $interval = 'Not set';
-        }
-        $build .= 'Payment Interval: ' . $interval . '<br />';
-        if ($gc->status != 'canceled' && $gc->type == 'P') {
-          !is_null($gc->next_payment) ? $next_payment = format_date($gc->next_payment) . '<br />' : $next_payment = 'Not set<br />';
-          $build .= 'Next payment creation: ' . $next_payment;
+          $type = $gc->type == 'P' ? 'Payments' : 'Subscription';
+          $build .= 'Type: ' . $type . '<br />';
+          $start = $gc->start_date ? format_date($gc->start_date, 'uc_store') . '<br />' : 'Not set<br />';
+          $build .= 'Start: ' . $start;
+          if (isset($order->products[$gc->ucpid]->data['interval_params'])) {
+            $params = $order->products[$gc->ucpid]->data['interval_params'];
+            $interval = $params['length'] . ' ' . $params['unit'];
+          }
+          else {
+            $interval = 'Not set';
+          }
+          $build .= 'Payment Interval: ' . $interval . '<br />';
+          if ($gc->status != 'canceled' && $gc->type == 'P') {
+            $next_payment = $gc->next_payment ? format_date($gc->next_payment) . '<br />' : 'Not set<br />';
+            $build .= 'Next payment creation: ' . $next_payment;
+          }
         }
         return array('#markup' => $build);
       }  

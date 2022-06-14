@@ -62,18 +62,21 @@ function uc_gc_client_billing_request($order_id, $request_id) {
     $gc_currency = uc_gc_client_currency($country_code);
     $currency_symbol = $gc_currency['sign'];
     $default_currency = config_get('uc_store.settings', 'uc_currency_code');
+    $payment_comment = t('GoCardless @payment_type payment ID @payment_id created.', array(
+      '@payment_id' => $billing_request->payment_request->links->payment,
+      '@payment_type' => $billing_request->fallback_occurred ? 'One-off' : 'Instant', 
+    ));
 
     if ($default_currency != $gc_currency['currency']) {
+      $payment_comment .= t(' The customer paid @amount (@currency). ', array(
+        '@amount' => uc_currency_format($payment_amount, $currency_symbol),
+        '@currency' => $gc_currency['currency'],
+      ));
       backdrop_set_message(t("The price of your order has been converted from @default_currency to @currency using the real currency exchange rates provided by GoCardless.", array(
        '@default_currency' => $default_currency,
        '@currency' => $gc_currency['currency'],
       )));
     }
-
-    $payment_comment = t('GoCardless @payment_type payment ID @payment_id created.', array(
-      '@payment_id' => $billing_request->payment_request->links->payment,
-      '@payment_type' => $billing_request->fallback_occurred ? 'One-off' : 'Instant', 
-    ));
 
     if (!$billing_request->fallback_occurred) { 
       $order_comment = t('You have made an Instant payment of @amount via GoCardless for your order #@order_id.', array(
