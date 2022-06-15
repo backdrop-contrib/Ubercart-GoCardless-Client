@@ -41,7 +41,7 @@ Documentation
 -------------
 
 Additional documentation is located in the project's Wiki: 
-(https://github.com/backdrop-contrib/uc_gc_client/wiki/Documentation).
+(https://github.com/backdrop-contrib/uc_gc_client/wiki).
 
 
 Issues
